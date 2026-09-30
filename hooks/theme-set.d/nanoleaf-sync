@@ -1,0 +1,3 @@
+#!/bin/bash
+# Intelligent sync/preview Nanoleaf Blocks with new Omarchy theme
+nanoleaf-ctl theme-change "$1"

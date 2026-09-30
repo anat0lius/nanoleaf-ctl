@@ -1,0 +1,619 @@
+import QtQuick
+import QtQuick.Controls
+import Quickshell
+import Quickshell.Io
+import qs.Ui
+import qs.Commons
+
+Panel {
+  id: root
+  moduleName: "nanoleaf"
+  ipcTarget: "nanoleaf"
+  manageIpc: true
+
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
+
+  Component.onCompleted: root.refresh()
+
+  property string scriptPath: Quickshell.env("HOME") + "/.config/omarchy/plugins/nanoleaf/nanoleaf_ctl.py"
+
+  property bool isOnline: false
+  property bool isOn: false
+  property int brightness: 0
+  property string currentScene: ""
+  property var scenes: []
+  property string deviceName: "Nanoleaf Blocks"
+  property string model: ""
+  property bool isMirroring: false
+  property string mirrorDisplay: "DP-1"
+  property int currentCt: 0
+  property string colorMode: ""
+  property bool isThemeSynced: false
+  property string themeName: ""
+
+  readonly property color themeForeground: (root.bar && root.bar.barForeground) ? root.bar.barForeground : Color.foreground
+
+  readonly property string icon: {
+    if (!isOnline) return "󰌶"
+    return isOn ? "󰌵" : "󰌶"
+  }
+
+  function runScript(args) {
+    var cmd = [root.scriptPath].concat(args)
+    Quickshell.execDetached(cmd)
+  }
+
+  function refresh() {
+    if (!statusProc.running) statusProc.running = true
+  }
+
+  function togglePower() {
+    root.isOn = !root.isOn
+    if (!root.isOn) root.isMirroring = false
+    runScript(["toggle"])
+    statusDelayTimer.restart()
+  }
+
+  function setBrightness(val) {
+    root.brightness = Math.max(1, Math.min(100, Math.round(val)))
+    runScript(["brightness", String(root.brightness)])
+  }
+
+  function toggleMirror() {
+    root.isMirroring = !root.isMirroring
+    if (root.isMirroring) {
+      root.isOn = true
+      runScript(["mirror", "start", "--display", root.mirrorDisplay])
+    } else {
+      runScript(["mirror", "stop"])
+    }
+    statusDelayTimer.restart()
+  }
+
+  function setMirrorDisplay(disp) {
+    if (root.mirrorDisplay === disp && root.isMirroring) return
+    root.mirrorDisplay = disp
+    if (root.isMirroring) {
+      runScript(["mirror", "start", "--display", disp])
+      statusDelayTimer.restart()
+    }
+  }
+
+  function selectScene(name) {
+    root.isMirroring = false
+    root.isThemeSynced = false
+    root.colorMode = "effect"
+    root.currentScene = name
+    root.isOn = true
+    runScript(["scene", name])
+    statusDelayTimer.restart()
+  }
+
+  function setCt(kelvin) {
+    root.isMirroring = false
+    root.isThemeSynced = false
+    root.colorMode = "ct"
+    root.currentCt = kelvin
+    root.currentScene = ""
+    root.isOn = true
+    runScript(["ct", String(kelvin)])
+    statusDelayTimer.restart()
+  }
+
+  function toggleThemeSync() {
+    if (root.isThemeSynced) {
+      root.isThemeSynced = false
+      runScript(["theme-sync", "--toggle"])
+    } else {
+      root.isMirroring = false
+      root.colorMode = "effect"
+      root.currentCt = 0
+      root.isThemeSynced = true
+      root.isOn = true
+      runScript(["theme-sync"])
+    }
+    statusDelayTimer.restart()
+  }
+
+  onOpenedChanged: {
+    if (opened) refresh()
+  }
+
+  Timer {
+    id: pollTimer
+    interval: 10000
+    running: true
+    repeat: true
+    onTriggered: root.refresh()
+  }
+
+  Timer {
+    id: initialTimer
+    interval: 600
+    running: true
+    repeat: false
+    onTriggered: root.refresh()
+  }
+
+  Timer {
+    id: statusDelayTimer
+    interval: 500
+    repeat: false
+    onTriggered: root.refresh()
+  }
+
+  Timer {
+    id: brightnessDebounce
+    interval: 200
+    repeat: false
+    onTriggered: root.setBrightness(root.brightness)
+  }
+
+  Process {
+    id: statusProc
+    command: [root.scriptPath, "status", "--json"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var raw = String(text || "").trim()
+        if (!raw) return
+        try {
+          var data = JSON.parse(raw)
+          root.isOnline = true
+          root.isOn = !!data.on
+          root.brightness = (data.brightness !== undefined) ? data.brightness : 0
+          root.currentScene = data.currentEffect || ""
+          root.scenes = data.effectsList || []
+          root.deviceName = data.name || "Nanoleaf Blocks"
+          root.model = data.model || ""
+          root.currentCt = (data.ct !== undefined) ? data.ct : 0
+          root.colorMode = data.colorMode || ""
+          if (root.colorMode === "ct") {
+            root.currentScene = ""
+          }
+          root.isMirroring = !!(data.mirror && data.mirror.active)
+          if (data.mirror && data.mirror.display) root.mirrorDisplay = data.mirror.display
+          if (data.themeSync) {
+            root.isThemeSynced = !!data.themeSync.synced
+            root.themeName = data.themeSync.theme || ""
+          }
+        } catch (e) {
+          // JSON parse failed or error returned
+        }
+      }
+    }
+  }
+
+  BarIconButton {
+    id: button
+    anchors.fill: parent
+    bar: root.bar
+    text: root.icon
+    active: root.isOn
+    activeColor: Color.accent
+    dimmed: !root.isOn
+    slotSize: Style.bar.iconSlot
+    tooltipText: root.isOnline
+      ? (root.deviceName + ": " + (root.isOn ? (root.isMirroring ? ("Mirroring " + root.mirrorDisplay) : (root.isThemeSynced ? ("Theme: " + root.themeName) : ((root.currentScene ? root.currentScene + " · " : "") + root.brightness + "%"))) : "Off"))
+      : "Nanoleaf: Offline"
+
+    onPressed: function(b) {
+      if (b === Qt.RightButton) {
+        root.togglePower()
+      } else {
+        root.toggle()
+      }
+    }
+  }
+
+  KeyboardPanel {
+    id: panel
+    anchorItem: button
+    owner: root
+    bar: root.bar
+    open: root.opened
+    focusTarget: keyCatcher
+    contentWidth: panel.fittedContentWidth(Style.space(340))
+    contentHeight: panel.fittedContentHeight(mainColumn.implicitHeight)
+
+    PanelKeyCatcher {
+      id: keyCatcher
+      anchors.fill: parent
+      onCloseRequested: root.close()
+      onTabRequested: function(direction) { root.switchPanel(direction) }
+
+      Column {
+        id: mainColumn
+        width: parent.width
+        spacing: Style.space(12)
+
+        // ---------- Hero: Icon, Name & Toggle ----------
+        Item {
+          width: parent.width
+          implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, powerSwitch.implicitHeight)
+
+          Text {
+            id: heroIcon
+            textFormat: Text.PlainText
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.icon
+            color: root.themeForeground
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+            font.pixelSize: Style.font.display
+            opacity: root.isOn ? 1.0 : 0.5
+          }
+
+          Column {
+            id: heroLabels
+            anchors.left: heroIcon.right
+            anchors.leftMargin: Style.space(12)
+            anchors.right: powerSwitch.left
+            anchors.rightMargin: Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Style.space(2)
+
+            Text {
+              text: root.deviceName
+              color: root.themeForeground
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.pixelSize: Style.font.title
+              font.bold: true
+              elide: Text.ElideRight
+              width: parent.width
+            }
+
+            Text {
+              textFormat: Text.PlainText
+              text: {
+                if (!root.isOnline) return "OFFLINE"
+                if (!root.isOn) return "POWER OFF"
+                if (root.isMirroring) return ("MIRRORING " + root.mirrorDisplay).toUpperCase()
+                if (root.isThemeSynced) return ("THEME: " + (root.themeName || "OMARCHY")).toUpperCase()
+                if (root.colorMode === "ct" || !root.currentScene) {
+                  return ("WHITE " + (root.currentCt > 0 ? (root.currentCt + "K") : "LIGHT")).toUpperCase()
+                }
+                return (root.currentScene || "LIGHT ON").toUpperCase()
+              }
+              color: root.isOn ? Color.accent : Qt.darker(root.themeForeground || Color.foreground, 1.4)
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              font.letterSpacing: 1.2
+              elide: Text.ElideRight
+              width: parent.width
+            }
+          }
+
+          ToggleSwitch {
+            id: powerSwitch
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            checked: root.isOn
+            foreground: root.themeForeground
+            onToggled: root.togglePower()
+          }
+        }
+
+        PanelSeparator {
+          foreground: root.themeForeground
+        }
+
+        // ---------- Brightness Slider ----------
+        Column {
+          width: parent.width
+          spacing: Style.space(6)
+          opacity: root.isOn ? 1.0 : 0.5
+
+          Row {
+            width: parent.width
+
+            Text {
+              text: "󰃠"
+              color: root.themeForeground
+              font.pixelSize: Style.font.icon
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Item { width: Style.space(8); height: 1 }
+
+            Text {
+              text: "Brightness"
+              color: root.themeForeground
+              font.pixelSize: Style.font.body
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Item {
+              width: parent.width - Style.space(140)
+              height: 1
+            }
+
+            Text {
+              text: root.brightness + "%"
+              color: Qt.darker(root.themeForeground || Color.foreground, 1.3)
+              font.pixelSize: Style.font.caption
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+              horizontalAlignment: Text.AlignRight
+            }
+          }
+
+          PanelSlider {
+            id: brightnessSlider
+            width: parent.width
+            bar: root.bar
+            minimum: 1
+            maximum: 100
+            step: 1
+            integer: true
+            value: root.brightness
+            onMoved: function(v) {
+              root.brightness = Math.round(v)
+              brightnessDebounce.restart()
+            }
+            onReleased: function(v) {
+              root.brightness = Math.round(v)
+              brightnessDebounce.stop()
+              root.setBrightness(root.brightness)
+            }
+          }
+        }
+
+        PanelSeparator {
+          foreground: root.themeForeground
+        }
+
+        // ---------- Color Temperature Quick Buttons ----------
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+          opacity: root.isOn ? 1.0 : 0.5
+
+          PanelSectionHeader {
+            text: "WHITE TEMPERATURE"
+            foreground: root.themeForeground
+            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(6)
+
+            Repeater {
+              model: [
+                { label: "Warm", k: 2700 },
+                { label: "Soft", k: 3500 },
+                { label: "Neutral", k: 4500 },
+                { label: "Cool", k: 6500 }
+              ]
+
+              Button {
+                required property var modelData
+                width: (parent.width - Style.space(18)) / 4
+                text: modelData.label
+                selected: !root.isMirroring && root.isOn && (root.colorMode === "ct" || !root.currentScene) && Math.abs(root.currentCt - modelData.k) < 300
+                fontSize: Style.font.caption
+                bordered: true
+                foreground: root.themeForeground
+                onClicked: root.setCt(modelData.k)
+              }
+            }
+          }
+        }
+
+        PanelSeparator {
+          foreground: root.themeForeground
+        }
+
+        // ---------- Screen Mirror Section ----------
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+          opacity: root.isOn ? 1.0 : 0.5
+
+          Row {
+            width: parent.width
+
+            Column {
+              anchors.verticalCenter: parent.verticalCenter
+              width: parent.width - mirrorSwitch.width - Style.space(12)
+              spacing: Style.space(2)
+
+              Row {
+                spacing: Style.space(6)
+
+                Text {
+                  text: "󰍹"
+                  color: root.isMirroring ? Color.accent : root.themeForeground
+                  font.pixelSize: Style.font.icon
+                  font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                  text: "Screen Mirror"
+                  color: root.isMirroring ? Color.accent : root.themeForeground
+                  font.pixelSize: Style.font.body
+                  font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                  font.bold: root.isMirroring
+                  anchors.verticalCenter: parent.verticalCenter
+                }
+              }
+
+              Text {
+                text: root.isMirroring ? ("Active on " + root.mirrorDisplay) : "Sync lighting with display"
+                color: Qt.darker(root.themeForeground || Color.foreground, 1.4)
+                font.pixelSize: Style.font.caption
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              }
+            }
+
+            ToggleSwitch {
+              id: mirrorSwitch
+              anchors.verticalCenter: parent.verticalCenter
+              checked: root.isMirroring
+              foreground: root.themeForeground
+              onToggled: root.toggleMirror()
+            }
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(6)
+
+            Repeater {
+              model: [
+                { id: "DP-1", label: "DP-1 (Main)" },
+                { id: "DP-2", label: "DP-2 (Secondary)" }
+              ]
+
+              Button {
+                required property var modelData
+                width: (parent.width - Style.space(6)) / 2
+                text: modelData.label
+                selected: root.mirrorDisplay === modelData.id
+                fontSize: Style.font.caption
+                bordered: true
+                foreground: root.themeForeground
+                onClicked: root.setMirrorDisplay(modelData.id)
+              }
+            }
+          }
+        }
+
+        PanelSeparator {
+          foreground: root.themeForeground
+        }
+
+        // ---------- Theme Sync Section ----------
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+          opacity: root.isOn ? 1.0 : 0.5
+
+          Row {
+            width: parent.width
+
+            Row {
+              spacing: Style.space(6)
+              anchors.verticalCenter: parent.verticalCenter
+
+              Text {
+                text: "󰏘"
+                color: root.isThemeSynced ? Color.accent : root.themeForeground
+                font.pixelSize: Style.font.icon
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                text: "Theme Sync"
+                color: root.isThemeSynced ? Color.accent : root.themeForeground
+                font.pixelSize: Style.font.body
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.bold: root.isThemeSynced
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            Item {
+              width: parent.width - Style.space(160)
+              height: 1
+            }
+
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.isThemeSynced ? "Locked" : "2s Preview"
+              color: root.isThemeSynced ? Color.accent : Qt.darker(root.themeForeground || Color.foreground, 1.4)
+              font.pixelSize: Style.font.caption
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.bold: root.isThemeSynced
+            }
+          }
+
+          Button {
+            width: parent.width
+            text: root.isThemeSynced
+              ? ("Synced to " + (root.themeName ? root.themeName : "Theme") + " (Click to Unlock)")
+              : ("Lock to " + (root.themeName ? root.themeName : "Theme") + " Palette")
+            selected: root.isThemeSynced
+            fontSize: Style.font.caption
+            bordered: true
+            foreground: root.themeForeground
+            onClicked: root.toggleThemeSync()
+          }
+        }
+
+        PanelSeparator {
+          foreground: root.themeForeground
+        }
+
+        // ---------- Scenes Section ----------
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+
+          PanelSectionHeader {
+            text: "SCENES"
+            foreground: root.themeForeground
+            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+          }
+
+          ListView {
+            id: scenesListView
+            width: parent.width
+            height: Math.min(contentHeight, Style.space(320))
+            spacing: Style.space(2)
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentHeight > height
+            model: root.scenes
+
+            ScrollBar.vertical: ScrollBar {
+              policy: ScrollBar.AsNeeded
+            }
+
+            delegate: CursorSurface {
+              id: sceneRow
+              required property var modelData
+              required property int index
+              width: scenesListView.width
+              height: Style.space(24)
+              current: modelData === root.currentScene
+              foreground: root.themeForeground
+              accent: Color.accent
+
+              Text {
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(10)
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                text: modelData
+                color: modelData === root.currentScene ? sceneRow.accent : sceneRow.foreground
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.pixelSize: Style.font.body
+                font.bold: modelData === root.currentScene
+                elide: Text.ElideRight
+              }
+
+              MouseArea {
+                id: sceneMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onEntered: sceneRow.hasCursor = true
+                onExited: sceneRow.hasCursor = false
+                onClicked: root.selectScene(modelData)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
