@@ -28,6 +28,11 @@ Panel {
   }
 
   property bool configured: true
+  // After pairing, the setup card asks for a display name before showing the controls.
+  property bool namingStep: false
+  property bool nameEdited: false
+  property string rawDeviceName: ""
+  readonly property bool ready: root.configured && !root.namingStep
   property bool canMirror: false
   property var themePalette: []
   property string themeSlug: ""
@@ -80,6 +85,19 @@ Panel {
     })
     return out
   }
+
+  function finishNaming() {
+    var name = nameField.text.trim()
+    // Only store a name that differs from the device's own, so renames in the Nanoleaf app still show.
+    if (name !== "" && name !== root.rawDeviceName) {
+      root.deviceName = name
+      runScript(["rename", name])
+    }
+    root.namingStep = false
+    statusDelayTimer.restart()
+  }
+
+  onRawDeviceNameChanged: if (root.namingStep && !root.nameEdited) nameField.text = root.rawDeviceName
 
   function startPairing() {
     if (pairProc.running) return
@@ -212,6 +230,7 @@ Panel {
             return
           }
           root.isOnline = true
+          root.rawDeviceName = data.rawName || data.name || ""
           root.isOn = !!data.on
           root.brightness = (data.brightness !== undefined) ? data.brightness : 0
           root.currentScene = data.currentEffect || ""
@@ -250,6 +269,8 @@ Panel {
       root.pairing = false
       if (exitCode === 0) {
         root.pairMessage = ""
+        root.nameEdited = false
+        root.namingStep = true
         root.refresh()
       } else {
         var lines = String(pairOut.text || "").trim().split("\n")
@@ -333,6 +354,8 @@ Panel {
       id: keyCatcher
       anchors.fill: parent
       onCloseRequested: root.close()
+      // The name field owns the keyboard while it is shown.
+      blocked: root.namingStep
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       Column {
@@ -340,14 +363,14 @@ Panel {
         width: parent.width
         spacing: Style.space(12)
 
-        // ---------- First run: pairing ----------
+        // ---------- First run: pairing, then naming ----------
         Column {
           width: parent.width
           spacing: Style.space(8)
-          visible: !root.configured
+          visible: !root.ready
 
           PanelSectionHeader {
-            text: "SET UP NANOLEAF"
+            text: root.configured ? "NAME YOUR LIGHTS" : "SET UP NANOLEAF"
             foreground: root.themeForeground
             fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
           }
@@ -355,9 +378,11 @@ Panel {
           Text {
             width: parent.width
             wrapMode: Text.WordWrap
-            text: root.pairing
-              ? "Hold the power button on the controller for 5-7 seconds, until the LED starts flashing, then release it."
-              : "Pair this computer with your Nanoleaf controller. It must be on the same network."
+            text: root.configured
+              ? "Paired! Choose the name shown in the bar."
+              : (root.pairing
+                ? "Hold the power button on the controller for 5-7 seconds, until the LED starts flashing, then release it."
+                : "Pair this computer with your Nanoleaf controller. It must be on the same network.")
             color: root.themeForeground
             font.pixelSize: Style.font.body
             font.family: root.bar ? root.bar.fontFamily : Style.font.family
@@ -365,7 +390,7 @@ Panel {
 
           Text {
             width: parent.width
-            visible: root.pairMessage !== ""
+            visible: !root.configured && root.pairMessage !== ""
             wrapMode: Text.WordWrap
             text: root.pairMessage
             color: Color.accent
@@ -375,6 +400,7 @@ Panel {
 
           Button {
             width: parent.width
+            visible: !root.configured
             text: root.pairing ? "Waiting for the controller…" : (root.pairMessage ? "Try again" : "Pair")
             selected: root.pairing
             fontSize: Style.font.caption
@@ -382,11 +408,36 @@ Panel {
             foreground: root.themeForeground
             onClicked: root.startPairing()
           }
+
+          TextField {
+            id: nameField
+            width: parent.width
+            visible: root.configured && root.namingStep
+            placeholderText: root.rawDeviceName || "Nanoleaf"
+            foreground: root.themeForeground
+            onTextEdited: root.nameEdited = true
+            onAccepted: root.finishNaming()
+            Keys.onEscapePressed: root.close()
+            onVisibleChanged: if (visible) {
+              text = root.rawDeviceName
+              Qt.callLater(forceActiveFocus)
+            }
+          }
+
+          Button {
+            width: parent.width
+            visible: root.configured && root.namingStep
+            text: "Continue"
+            fontSize: Style.font.caption
+            bordered: true
+            foreground: root.themeForeground
+            onClicked: root.finishNaming()
+          }
         }
 
         // ---------- Hero: Icon, Name & Toggle ----------
         Item {
-          visible: root.configured
+          visible: root.ready
           width: parent.width
           implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, powerSwitch.implicitHeight)
 
@@ -454,13 +505,13 @@ Panel {
         }
 
         PanelSeparator {
-          visible: root.configured
+          visible: root.ready
           foreground: root.themeForeground
         }
 
         // ---------- Brightness Slider ----------
         Column {
-          visible: root.configured
+          visible: root.ready
           width: parent.width
           spacing: Style.space(6)
           opacity: root.isOn ? 1.0 : 0.5
@@ -524,13 +575,13 @@ Panel {
         }
 
         PanelSeparator {
-          visible: root.configured
+          visible: root.ready
           foreground: root.themeForeground
         }
 
         // ---------- Color Temperature Quick Buttons ----------
         Column {
-          visible: root.configured
+          visible: root.ready
           width: parent.width
           spacing: Style.space(8)
           opacity: root.isOn ? 1.0 : 0.5
@@ -568,13 +619,13 @@ Panel {
         }
 
         PanelSeparator {
-          visible: root.configured && root.canMirror
+          visible: root.ready && root.canMirror
           foreground: root.themeForeground
         }
 
         // ---------- Screen Mirror Section ----------
         Column {
-          visible: root.configured && root.canMirror
+          visible: root.ready && root.canMirror
           width: parent.width
           spacing: Style.space(8)
           opacity: root.isOn ? 1.0 : 0.5
@@ -648,13 +699,13 @@ Panel {
         }
 
         PanelSeparator {
-          visible: root.configured && root.themeAvailable
+          visible: root.ready && root.themeAvailable
           foreground: root.themeForeground
         }
 
         // ---------- Theme Sync Section ----------
         Column {
-          visible: root.configured && root.themeAvailable
+          visible: root.ready && root.themeAvailable
           width: parent.width
           spacing: Style.space(8)
           opacity: root.isOn ? 1.0 : 0.5
@@ -713,13 +764,13 @@ Panel {
         }
 
         PanelSeparator {
-          visible: root.configured
+          visible: root.ready
           foreground: root.themeForeground
         }
 
         // ---------- Scenes Section ----------
         Column {
-          visible: root.configured
+          visible: root.ready
           width: parent.width
           spacing: Style.space(8)
 

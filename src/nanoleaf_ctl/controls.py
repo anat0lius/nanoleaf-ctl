@@ -8,6 +8,7 @@ from .state import (
     get_theme_sync_status,
     load_config,
     read_json,
+    save_config,
     save_power_intent,
     set_user_power_intent,
     unlock_theme_sync,
@@ -43,6 +44,19 @@ def _value(state: dict, key: str, default=0):
 def is_configured() -> bool:
     cfg = load_config()
     return bool(cfg.get("ip") and cfg.get("token"))
+
+
+def set_friendly_name(name: str) -> None:
+    """Sets the display name; an empty name goes back to the device's own name."""
+    if not is_configured():
+        raise RuntimeError("Not paired with a Nanoleaf device. Run: nanoleaf-ctl pair")
+    cfg = load_config()
+    name = name.strip()
+    if name:
+        cfg["friendly_name"] = name
+    else:
+        cfg.pop("friendly_name", None)
+    save_config(cfg)
 
 
 def get_status() -> dict:

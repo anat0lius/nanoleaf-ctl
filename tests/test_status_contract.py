@@ -69,3 +69,15 @@ def test_mirror_capability_requires_grim_and_a_display(monkeypatch):
     monkeypatch.setattr(controls, "grim_available", lambda: True)
     monkeypatch.setattr(controls, "get_hyprland_monitors", lambda: [])
     assert controls.get_status()["capabilities"] == {"mirror": False}
+
+
+def test_rename_sets_and_clears_friendly_name(monkeypatch):
+    cfg = {"ip": "1.2.3.4", "token": "t"}
+    monkeypatch.setattr(controls, "load_config", lambda: cfg)
+    monkeypatch.setattr(controls, "save_config", lambda c: None)
+
+    controls.set_friendly_name("  Desk lights ")
+    assert cfg["friendly_name"] == "Desk lights"
+
+    controls.set_friendly_name("")
+    assert "friendly_name" not in cfg

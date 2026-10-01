@@ -39,6 +39,7 @@ Without installing: `PYTHONPATH=src python3 -m nanoleaf_ctl <command>`.
 ```sh
 nanoleaf-ctl status                 # power, brightness, current scene
 nanoleaf-ctl on | off | toggle
+nanoleaf-ctl rename "Desk lights"   # display name (empty string = the device's own name)
 nanoleaf-ctl brightness 60
 nanoleaf-ctl scenes                 # list scenes (♪ = reacts to music)
 nanoleaf-ctl scene "Northern Lights"
@@ -84,7 +85,7 @@ systemctl --user enable --now nanoleaf-session.service
 | Key | Meaning |
 | --- | --- |
 | `ip` | Device address. If you set it before pairing (`{"ip": "192.168.1.50"}`), `pair` uses it instead of discovery |
-| `friendly_name` | Name shown instead of the device's own name |
+| `friendly_name` | Name shown instead of the device's own name (set it with `nanoleaf-ctl rename`) |
 | `mirror_display` | Preferred display for mirroring (default: the focused display) |
 
 ## Status JSON

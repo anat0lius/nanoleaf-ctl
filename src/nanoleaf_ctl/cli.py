@@ -26,6 +26,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     _json_flag(sub.add_parser("status", help="Get device status"), "Output raw JSON")
 
+    p = sub.add_parser("rename", help="Set the display name (empty to use the device's own name)")
+    p.add_argument("name", help="Display name")
+
     sub.add_parser("on", help="Turn device ON")
     sub.add_parser("off", help="Turn device OFF")
     sub.add_parser("toggle", help="Toggle device ON/OFF")
@@ -116,6 +119,11 @@ def _cmd_status(a):
     mirror_info = f" | Mirror: ACTIVE ({st['mirror']['display']})" if st["mirror"].get("active") else ""
     print(f"{st['name']} ({st['model']}) - Power: {pwr} | Brightness: {st['brightness']}% "
           f"| Scene: {st['currentEffect']}{mirror_info}")
+
+
+def _cmd_rename(a):
+    controls.set_friendly_name(a.name)
+    print(f"Display name set to '{a.name.strip()}'" if a.name.strip() else "Display name reset")
 
 
 def _cmd_on(a):
@@ -244,6 +252,7 @@ COMMANDS = {
     "discover": _cmd_discover,
     "pair": _cmd_pair,
     "status": _cmd_status,
+    "rename": _cmd_rename,
     "on": _cmd_on,
     "off": _cmd_off,
     "toggle": _cmd_toggle,
