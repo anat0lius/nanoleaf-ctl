@@ -13,24 +13,18 @@ from typing import Any
 # paths
 # ============================================================================
 
-HOME = Path.home()
+CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "nanoleaf"
+STATE_DIR = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "nanoleaf"
 
-CONFIG_PATH = HOME / ".config/omarchy/nanoleaf.json"
-
-STATE_DIR = HOME / ".local/state/omarchy"
-MIRROR_STATE_PATH = STATE_DIR / "nanoleaf-mirror.json"
-THEME_STATE_PATH = STATE_DIR / "nanoleaf-theme.json"
-PREVIEW_STATE_PATH = STATE_DIR / "nanoleaf-preview.json"
-PREVIEW_PID_PATH = STATE_DIR / "nanoleaf-preview.pid"
-INTENT_STATE_PATH = STATE_DIR / "nanoleaf-power-intent.json"
-SCENE_TYPES_PATH = STATE_DIR / "nanoleaf-scene-types.json"
+CONFIG_PATH = CONFIG_DIR / "config.json"
+MIRROR_STATE_PATH = STATE_DIR / "mirror.json"
+THEME_STATE_PATH = STATE_DIR / "theme.json"
+PREVIEW_STATE_PATH = STATE_DIR / "preview.json"
+PREVIEW_PID_PATH = STATE_DIR / "preview.pid"
+INTENT_STATE_PATH = STATE_DIR / "power-intent.json"
+SCENE_TYPES_PATH = STATE_DIR / "scene-types.json"
 # Lives in the runtime dir so it disappears at logout/reboot: "restored once per login".
-SESSION_MARKER_PATH = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "nanoleaf-omarchy-session-started"
-
-OMARCHY_CURRENT_THEME_NAME = STATE_DIR / "current/theme.name"
-OMARCHY_CURRENT_THEME_COLORS = STATE_DIR / "current/theme/colors.toml"
-USER_THEMES_DIR = HOME / ".config/omarchy/themes"
-SYSTEM_THEMES_DIR = Path("/usr/share/omarchy/themes")
+SESSION_MARKER_PATH = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "nanoleaf-ctl-session-started"
 
 
 # ============================================================================
@@ -60,7 +54,7 @@ def remove(path: Path) -> None:
 
 
 def spawn_worker(*args: str) -> None:
-    """Runs `python -m nanoleaf_omarchy <args>` detached.
+    """Runs `python -m nanoleaf_ctl <args>` detached.
 
     Puts this package's parent directory on PYTHONPATH so the worker also starts when the
     package is run straight from a checkout instead of being installed.
@@ -69,7 +63,7 @@ def spawn_worker(*args: str) -> None:
     root = str(Path(__file__).resolve().parent.parent)
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [root, env.get("PYTHONPATH")]))
     subprocess.Popen(
-        [sys.executable, "-m", "nanoleaf_omarchy", *args],
+        [sys.executable, "-m", "nanoleaf_ctl", *args],
         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
     )
 
@@ -133,45 +127,11 @@ def get_user_power_intent() -> bool:
 
 
 # ============================================================================
-# theme_state
+# theme lock
 # ============================================================================
 
-
-def get_current_theme_slug() -> str:
-    """Current Omarchy theme slug, or "" if it can't be determined."""
-    try:
-        return OMARCHY_CURRENT_THEME_NAME.read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
-
-
-def get_theme_colors(theme_slug: str | None = None) -> dict:
-    if theme_slug:
-        user_p = USER_THEMES_DIR / theme_slug / "colors.toml"
-        theme_file: Path = user_p if user_p.exists() else SYSTEM_THEMES_DIR / theme_slug / "colors.toml"
-    else:
-        theme_file = OMARCHY_CURRENT_THEME_COLORS
-
-    colors = {}
-    try:
-        for line in theme_file.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if "=" in line and not line.startswith("#"):
-                k, v = line.split("=", 1)
-                colors[k.strip()] = v.strip().strip("\"'")
-    except FileNotFoundError:
-        pass
-    except OSError as e:
-        sys.stderr.write(f"Error reading theme colors: {e}\n")
-    return colors
-
-
 def get_theme_sync_status() -> dict:
-    return read_json(THEME_STATE_PATH) or {
-        "synced": False,
-        "theme": get_current_theme_slug(),
-        "mode": "dynamic",
-    }
+    return read_json(THEME_STATE_PATH) or {"synced": False, "theme": "", "mode": "dynamic"}
 
 
 def save_theme_sync_status(st: dict) -> None:

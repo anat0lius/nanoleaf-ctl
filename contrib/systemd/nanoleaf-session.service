@@ -1,5 +1,5 @@
 [Unit]
-Description=Nanoleaf Blocks Session Lifecycle Manager
+Description=Nanoleaf session lifecycle (restore on login, off on logout)
 PartOf=graphical-session.target
 After=graphical-session.target
 

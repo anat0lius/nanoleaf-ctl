@@ -3,21 +3,21 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "nanoleaf-omarchy"
+name = "nanoleaf-ctl"
 version = "1.0.0"
-description = "Nanoleaf Blocks / Panels control, screen mirroring and theme sync for Omarchy"
+description = "Control Nanoleaf light panels: scenes, brightness, screen mirroring and palette sync"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
-nanoleaf-ctl = "nanoleaf_omarchy.cli:main"
+nanoleaf-ctl = "nanoleaf_ctl.cli:main"
 
 [dependency-groups]
 dev = ["pytest", "ruff"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/nanoleaf_omarchy"]
+packages = ["src/nanoleaf_ctl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -4,7 +4,7 @@
   "name": "Nanoleaf",
   "version": "1.0.0",
   "author": "ender",
-  "description": "Nanoleaf Blocks control widget and panel",
+  "description": "Nanoleaf light panels control widget and panel",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "Nanoleaf",
-    "description": "Control Nanoleaf Blocks, scenes, and brightness",
+    "description": "Control Nanoleaf light panels: scenes, brightness, mirroring and theme sync",
     "category": "Lighting",
     "defaultSection": "right",
     "allowMultiple": false

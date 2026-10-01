@@ -1,7 +1,7 @@
 """Direct device controls: status, power, brightness, scenes, color."""
 
 from .api import api_request, set_power_state
-from .mirror import get_hyprland_monitors, get_mirror_status, stop_mirror
+from .mirror import get_hyprland_monitors, get_mirror_status, grim_available, stop_mirror
 from .state import (
     SCENE_TYPES_PATH,
     cancel_preview,
@@ -59,9 +59,10 @@ def get_status() -> dict:
 
     current_effect = effects.get("select", "")
     if (current_effect == "*Dynamic*" or current_effect.startswith("Theme:")) and theme_st.get("synced"):
-        current_effect = f"Theme: {theme_st.get('theme', 'Omarchy').replace('-', ' ').title()}"
+        current_effect = f"Theme: {(theme_st.get('theme') or 'palette').replace('-', ' ').title()}"
 
     effects_list = effects.get("effectsList", [])
+    displays = [m["name"] for m in get_hyprland_monitors()]
     return {
         "configured": True,
         "name": cfg.get("friendly_name") or info.get("name", "Nanoleaf"),
@@ -80,7 +81,8 @@ def get_status() -> dict:
         "musicScenes": get_music_scenes(effects_list),
         "panelLayout": info.get("panelLayout", {}),
         "mirror": get_mirror_status(),
-        "displays": [m["name"] for m in get_hyprland_monitors()],
+        "displays": displays,
+        "capabilities": {"mirror": grim_available() and bool(displays)},
         "themeSync": theme_st,
     }
 

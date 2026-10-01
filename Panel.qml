@@ -18,7 +18,7 @@ Panel {
   readonly property string pluginDir: decodeURIComponent(Qt.resolvedUrl(".").toString().replace("file://", "")).replace(/\/$/, "")
 
   function ctl(args) {
-    return ["env", "PYTHONPATH=" + root.pluginDir + "/src", "python3", "-m", "nanoleaf_omarchy"].concat(args)
+    return ["env", "PYTHONPATH=" + root.pluginDir + "/src", "python3", "-m", "nanoleaf_ctl"].concat(args)
   }
 
   Component.onCompleted: {
@@ -28,6 +28,11 @@ Panel {
   }
 
   property bool configured: true
+  property bool canMirror: false
+  property var themePalette: []
+  property string themeSlug: ""
+  // Theme sync is offered only when the desktop theme's name and palette can be read.
+  readonly property bool themeAvailable: root.themePalette.length > 0 && root.themeSlug !== ""
   property bool pairing: false
   property string pairMessage: ""
 
@@ -56,6 +61,24 @@ Panel {
 
   function runScript(args) {
     Quickshell.execDetached(root.ctl(args))
+  }
+
+  function themeArgs(command, slug) {
+    return [command, "--name", slug, "--colors"].concat(root.themePalette)
+  }
+
+  // Palette colors from a theme's colors.toml, in a fixed order, without duplicates.
+  function parsePalette(text) {
+    var found = {}
+    String(text || "").split("\n").forEach(function(line) {
+      var m = line.match(/^\s*([A-Za-z_]+)\s*=\s*["']?(#[0-9a-fA-F]{3,6})["']?\s*$/)
+      if (m) found[m[1]] = m[2]
+    })
+    var out = []
+    ;["accent", "blue", "cyan", "green", "yellow", "orange", "magenta", "red"].forEach(function(k) {
+      if (found[k] && out.indexOf(found[k]) === -1) out.push(found[k])
+    })
+    return out
   }
 
   function startPairing() {
@@ -127,14 +150,14 @@ Panel {
   function toggleThemeSync() {
     if (root.isThemeSynced) {
       root.isThemeSynced = false
-      runScript(["theme-sync", "--toggle"])
+      runScript(["theme-sync", "--off"])
     } else {
       root.isMirroring = false
       root.colorMode = "effect"
       root.currentCt = 0
       root.isThemeSynced = true
       root.isOn = true
-      runScript(["theme-sync"])
+      runScript(root.themeArgs("theme-sync", root.themeSlug))
     }
     statusDelayTimer.restart()
   }
@@ -203,6 +226,7 @@ Panel {
           }
           root.isMirroring = !!(data.mirror && data.mirror.active)
           root.displays = data.displays || []
+          root.canMirror = !!(data.capabilities && data.capabilities.mirror)
           if (data.mirror && data.mirror.display) root.mirrorDisplay = data.mirror.display
           if (data.themeSync) {
             root.isThemeSynced = !!data.themeSync.synced
@@ -234,8 +258,11 @@ Panel {
     }
   }
 
-  // Follow Omarchy theme changes (locked: re-sync palette; unlocked: brief preview).
-  property string lastThemeSlug: ""
+  // Follow the desktop theme (Omarchy): lock the lights to its palette, or preview it briefly.
+  // The theme name file is written after the new colors are in place, so a change to it means
+  // colors.toml is already current.
+  property string pendingThemeSlug: ""
+
   FileView {
     id: themeFile
     path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme.name"
@@ -244,14 +271,30 @@ Panel {
     onFileChanged: reload()
     onLoaded: {
       var slug = String(text() || "").trim()
-      var previous = root.lastThemeSlug
-      root.lastThemeSlug = slug
+      var previous = root.themeSlug
+      root.themeSlug = slug
       // The first read is just startup, not a theme change.
-      if (previous && slug && slug !== previous && root.configured) {
-        root.runScript(["theme-change", slug])
-        statusDelayTimer.restart()
+      if (previous && slug && slug !== previous) {
+        root.pendingThemeSlug = slug
+        colorsFile.reload()
       }
     }
+    onLoadFailed: root.themeSlug = ""
+  }
+
+  FileView {
+    id: colorsFile
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+    printErrors: false
+    onLoaded: {
+      root.themePalette = root.parsePalette(text())
+      if (root.pendingThemeSlug && root.themeAvailable && root.configured) {
+        root.runScript(root.themeArgs("theme-change", root.pendingThemeSlug))
+        statusDelayTimer.restart()
+      }
+      root.pendingThemeSlug = ""
+    }
+    onLoadFailed: root.themePalette = []
   }
 
   BarIconButton {
@@ -384,7 +427,7 @@ Panel {
                 if (!root.isOnline) return "OFFLINE"
                 if (!root.isOn) return "POWER OFF"
                 if (root.isMirroring) return ("MIRRORING " + root.mirrorDisplay).toUpperCase()
-                if (root.isThemeSynced) return ("THEME: " + (root.themeName || "OMARCHY")).toUpperCase()
+                if (root.isThemeSynced) return ("THEME: " + (root.themeName || "THEME")).toUpperCase()
                 if (root.colorMode === "ct" || !root.currentScene) {
                   return ("WHITE " + (root.currentCt > 0 ? (root.currentCt + "K") : "LIGHT")).toUpperCase()
                 }
@@ -525,13 +568,13 @@ Panel {
         }
 
         PanelSeparator {
-          visible: root.configured
+          visible: root.configured && root.canMirror
           foreground: root.themeForeground
         }
 
         // ---------- Screen Mirror Section ----------
         Column {
-          visible: root.configured
+          visible: root.configured && root.canMirror
           width: parent.width
           spacing: Style.space(8)
           opacity: root.isOn ? 1.0 : 0.5
@@ -605,13 +648,13 @@ Panel {
         }
 
         PanelSeparator {
-          visible: root.configured
+          visible: root.configured && root.themeAvailable
           foreground: root.themeForeground
         }
 
         // ---------- Theme Sync Section ----------
         Column {
-          visible: root.configured
+          visible: root.configured && root.themeAvailable
           width: parent.width
           spacing: Style.space(8)
           opacity: root.isOn ? 1.0 : 0.5

@@ -1,6 +1,6 @@
 import struct
 
-from nanoleaf_omarchy.mirror import build_packet, project_panels, sample_region
+from nanoleaf_ctl.mirror import build_packet, project_panels, sample_region
 
 
 def test_project_panels_maps_corners_inside_display():

@@ -33,7 +33,7 @@ wheels = [
 ]
 
 [[package]]
-name = "nanoleaf-omarchy"
+name = "nanoleaf-ctl"
 version = "1.0.0"
 source = { editable = "." }
 

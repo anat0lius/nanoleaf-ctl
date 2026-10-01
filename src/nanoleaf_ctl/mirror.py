@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import shutil
 import signal
 import socket
 import struct
@@ -27,6 +28,10 @@ from .state import (
 EXT_CONTROL_PORT = 60222
 DEFAULT_FPS = 8
 DEFAULT_TRANS_TIME = 4
+
+
+def grim_available() -> bool:
+    return shutil.which("grim") is not None
 
 
 # --- Display / layout geometry -------------------------------------------------
@@ -228,6 +233,8 @@ def run_mirror_loop(display_name=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS
 # --- Control (called from the CLI process) -----------------------------------------
 
 def start_mirror(display=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME) -> bool:
+    if not grim_available():
+        raise RuntimeError("Screen mirroring needs `grim` (and Hyprland's `hyprctl`) to be installed")
     mon = get_target_monitor(display)
     if not mon:
         raise RuntimeError("No displays detected (is Hyprland running?)")

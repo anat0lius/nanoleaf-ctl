@@ -1,4 +1,4 @@
-from nanoleaf_omarchy import theme
+from nanoleaf_ctl import theme
 
 
 def test_session_start_once_skips_after_marker(monkeypatch, tmp_path, capsys):

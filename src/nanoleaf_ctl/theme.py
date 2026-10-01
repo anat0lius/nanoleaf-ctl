@@ -1,7 +1,8 @@
-"""Omarchy theme sync (palette lock / preview) and PC session lifecycle."""
+"""Palette sync (lock / preview) and PC session lifecycle."""
 
 import colorsys
 import os
+import re
 import sys
 import time
 
@@ -13,8 +14,6 @@ from .state import (
     PREVIEW_STATE_PATH,
     SESSION_MARKER_PATH,
     cancel_preview,
-    get_current_theme_slug,
-    get_theme_colors,
     get_theme_sync_status,
     kill_preview_worker,
     load_config,
@@ -50,33 +49,40 @@ def hex_to_hsb(hex_str: str) -> dict:
 # theme
 # ============================================================================
 
-PALETTE_KEYS = ["accent", "blue", "cyan", "green", "yellow", "orange", "magenta", "red"]
 PREVIEW_SECONDS = 2
+_HEX = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
 
-def apply_theme_palette(theme_slug: str | None = None) -> bool:
+def normalize_colors(colors: list[str]) -> list[str]:
+    """Validates hex colors and drops duplicates, keeping order."""
+    out: list[str] = []
+    for c in colors:
+        m = _HEX.match(c.strip())
+        if not m:
+            raise ValueError(f"Invalid color '{c}' (expected hex like #f38d70)")
+        hex_ = "#" + m.group(1).lower()
+        if hex_ not in out:
+            out.append(hex_)
+    if not out:
+        raise ValueError("At least one color is required")
+    return out
+
+
+def _theme_label(name: str) -> str:
+    return f"Theme: {(name or 'palette').replace('-', ' ').title()}"
+
+
+def apply_theme_palette(name: str, colors: list[str]) -> None:
     """Sends the dynamic palette flow payload to Nanoleaf."""
+    palette = [hex_to_hsb(c) for c in normalize_colors(colors)]
     stop_mirror()
-    slug = theme_slug or get_current_theme_slug()
-    colors = get_theme_colors(slug)
-    if not colors:
-        sys.stderr.write(f"No colors found for theme {slug}\n")
-        return False
-
-    palette_hexes = []
-    for k in PALETTE_KEYS:
-        if k in colors and colors[k] not in palette_hexes:
-            palette_hexes.append(colors[k])
-    if not palette_hexes:
-        palette_hexes = [colors.get("accent", "#7daea3")]
-
     payload = {
         "write": {
             "command": "display",
-            "animName": f"Theme: {(slug or 'omarchy').replace('-', ' ').title()}",
+            "animName": _theme_label(name),
             "animType": "random",
             "colorType": "HSB",
-            "palette": [hex_to_hsb(c) for c in palette_hexes],
+            "palette": palette,
             "brightnessRange": {"minValue": 60, "maxValue": 100},
             "transTime": {"minValue": 30, "maxValue": 70},
             "delayTime": {"minValue": 15, "maxValue": 35},
@@ -85,22 +91,19 @@ def apply_theme_palette(theme_slug: str | None = None) -> bool:
     }
     set_power_state(True)
     api_request("PUT", "effects", payload)
-    return True
 
 
-def sync_theme(theme_slug: str | None = None) -> bool:
-    """Locks Theme Sync ON for current/given theme."""
+def sync_theme(name: str, colors: list[str]) -> None:
+    """Locks theme sync ON for the given palette."""
+    colors = normalize_colors(colors)
     save_power_intent(user_intent_off=False, mode="theme")
     cancel_preview()
-    slug = theme_slug or get_current_theme_slug()
-    if not apply_theme_palette(slug):
-        return False
+    apply_theme_palette(name, colors)
 
     st = get_theme_sync_status()
-    st.update(synced=True, theme=slug, mode="dynamic")
+    st.update(synced=True, theme=name, mode="dynamic", palette=colors)
     save_theme_sync_status(st)
-    print(f"Nanoleaf locked to theme '{slug}'")
-    return True
+    print(f"Nanoleaf locked to theme '{name}'")
 
 
 def _previous_scene() -> str | None:
@@ -115,19 +118,15 @@ def _previous_scene() -> str | None:
     return next((e for e in effects if not e.startswith(("*", "Theme:"))), None)
 
 
-def toggle_theme_sync() -> bool:
-    """Toggles theme sync lock on/off."""
+def unsync_theme() -> None:
+    """Unlocks theme sync and restores the previous scene."""
     st = get_theme_sync_status()
-    if st.get("synced"):
-        st["synced"] = False
-        save_theme_sync_status(st)
-        scene = _previous_scene()
-        if scene:
-            set_scene(scene)
-        print(f"Theme sync unlocked{f' (restored {scene})' if scene else ''}")
-        return False
-    sync_theme()
-    return True
+    st["synced"] = False
+    save_theme_sync_status(st)
+    scene = _previous_scene()
+    if scene:
+        set_scene(scene)
+    print(f"Theme sync unlocked{f' (restored {scene})' if scene else ''}")
 
 
 def _snapshot_state() -> None:
@@ -148,13 +147,13 @@ def _snapshot_state() -> None:
         sys.stderr.write(f"Snapshot error: {e}\n")
 
 
-def on_theme_change(theme_slug: str | None) -> None:
-    """Theme change handler called by the theme-set hook."""
-    slug = theme_slug or get_current_theme_slug()
+def on_theme_change(name: str, colors: list[str]) -> None:
+    """Handles a theme change: re-sync if locked, else preview briefly and restore."""
+    colors = normalize_colors(colors)
 
     if get_theme_sync_status().get("synced"):
-        # User explicitly locked Theme Sync: stay permanently synced with the new theme
-        sync_theme(slug)
+        # Locked: stay permanently synced with the new theme
+        sync_theme(name, colors)
         return
 
     # Theme Sync is OFF: preview briefly, then revert to the exact previous state.
@@ -164,10 +163,10 @@ def on_theme_change(theme_slug: str | None) -> None:
     else:
         _snapshot_state()
 
-    apply_theme_palette(slug)
+    apply_theme_palette(name, colors)
 
     spawn_worker("theme-preview-restore", "--delay", str(PREVIEW_SECONDS))
-    print(f"Theme '{slug}' previewing for {PREVIEW_SECONDS}s...")
+    print(f"Theme '{name}' previewing for {PREVIEW_SECONDS}s...")
 
 
 def run_preview_restore(delay: int = PREVIEW_SECONDS) -> None:
@@ -211,8 +210,9 @@ def _restore(st: dict, cfg: dict) -> None:
     if mode == "mirror":
         start_mirror(display=st.get("mirror_display"))
         print("Nanoleaf restored screen mirror on session start.")
-    elif mode == "theme":
-        sync_theme()
+    elif mode == "theme" and get_theme_sync_status().get("palette"):
+        theme = get_theme_sync_status()
+        sync_theme(theme.get("theme", ""), theme["palette"])
         print("Nanoleaf restored theme sync on session start.")
     elif mode == "ct" and st.get("ct"):
         kelvin = st["ct"]

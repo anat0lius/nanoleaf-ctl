@@ -14,7 +14,7 @@ def _json_flag(p: argparse.ArgumentParser, help: str = "Output as JSON") -> None
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="nanoleaf-ctl", description="Nanoleaf Blocks & Panels CLI for Omarchy")
+    parser = argparse.ArgumentParser(prog="nanoleaf-ctl", description="Control Nanoleaf light panels")
     sub = parser.add_subparsers(dest="command")
 
     _json_flag(sub.add_parser("discover", help="Discover devices on local network"))
@@ -61,12 +61,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fps", type=int, default=mirror.DEFAULT_FPS)
     p.add_argument("--trans-time", type=int, default=mirror.DEFAULT_TRANS_TIME)
 
-    p = sub.add_parser("theme-sync", help="Lock/toggle Nanoleaf with Omarchy theme")
-    p.add_argument("--theme", help="Specific theme slug to sync")
-    p.add_argument("--toggle", action="store_true", help="Toggle theme sync lock on/off")
+    p = sub.add_parser("theme-sync", help="Lock the lights to a color palette (e.g. from your desktop theme)")
+    p.add_argument("--name", default="", help="Label for the palette (e.g. the theme name)")
+    p.add_argument("--colors", nargs="+", metavar="HEX", help="Palette colors, e.g. #f38d70 #85dacc")
+    p.add_argument("--off", action="store_true", help="Unlock theme sync and restore the previous scene")
 
-    p = sub.add_parser("theme-change", help="Intelligent theme change handler (hook)")
-    p.add_argument("theme", nargs="?", help="New theme slug")
+    p = sub.add_parser("theme-change", help="Palette changed: re-sync if locked, else preview briefly then restore")
+    p.add_argument("--name", default="", help="Label for the palette (e.g. the theme name)")
+    p.add_argument("--colors", nargs="+", required=True, metavar="HEX", help="Palette colors")
 
     p = sub.add_parser("theme-preview-restore", help=argparse.SUPPRESS)
     p.add_argument("--delay", type=int, default=theme.PREVIEW_SECONDS, help="Delay in seconds before restoring")
@@ -198,14 +200,16 @@ def _cmd_mirror_run(a):
 
 
 def _cmd_theme_sync(a):
-    if a.toggle:
-        theme.toggle_theme_sync()
+    if a.off:
+        theme.unsync_theme()
+    elif a.colors:
+        theme.sync_theme(a.name, a.colors)
     else:
-        theme.sync_theme(a.theme)
+        raise ValueError("theme-sync needs --colors (or --off to unlock)")
 
 
 def _cmd_theme_change(a):
-    theme.on_theme_change(a.theme)
+    theme.on_theme_change(a.name, a.colors)
 
 
 def _cmd_theme_restore(a):
