@@ -16,7 +16,7 @@ Panel {
 
   Component.onCompleted: root.refresh()
 
-  property string scriptPath: Quickshell.env("HOME") + "/.config/omarchy/plugins/nanoleaf/nanoleaf_ctl.py"
+  property string ctlCommand: "nanoleaf-ctl"
 
   property bool isOnline: false
   property bool isOn: false
@@ -40,7 +40,7 @@ Panel {
   }
 
   function runScript(args) {
-    var cmd = [root.scriptPath].concat(args)
+    var cmd = [root.ctlCommand].concat(args)
     Quickshell.execDetached(cmd)
   }
 
@@ -152,7 +152,7 @@ Panel {
 
   Process {
     id: statusProc
-    command: [root.scriptPath, "status", "--json"]
+    command: [root.ctlCommand, "status", "--json"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
