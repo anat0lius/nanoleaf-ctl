@@ -76,6 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("session-start", help="Auto turn-on on PC start if last user intent was ON")
     p.add_argument("--retries", type=int, default=8)
     p.add_argument("--interval", type=int, default=2)
+    p.add_argument("--once", action="store_true", help="Skip if already restored during this login")
     sub.add_parser("session-end", help="Auto turn-off on PC shutdown/logout")
 
     p = sub.add_parser("power-intent", help="Check/set user power intent")
@@ -102,6 +103,9 @@ def _cmd_pair(a):
 
 
 def _cmd_status(a):
+    if a.json and not controls.is_configured():
+        print(json.dumps({"configured": False}))
+        return
     st = controls.get_status()
     if a.json:
         print(json.dumps(st, indent=2))
@@ -217,7 +221,7 @@ def _cmd_theme_status(a):
 
 
 def _cmd_session_start(a):
-    theme.on_session_start(a.retries, a.interval)
+    theme.on_session_start(a.retries, a.interval, a.once)
 
 
 def _cmd_session_end(a):

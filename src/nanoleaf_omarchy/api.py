@@ -116,7 +116,7 @@ def pair(ip=None, port=DEFAULT_PORT, timeout=45) -> bool:
         print("Discovering Nanoleaf on local network...")
         devs = discover_device(timeout=4)
         if not devs:
-            print("No Nanoleaf device found via mDNS. Please specify --ip.")
+            print(f"No Nanoleaf device found via mDNS. Pass --ip, or set \"ip\" in {CONFIG_PATH} and try again.")
             return False
         ip, port = devs[0]["ip"], devs[0]["port"]
         cfg.update(devs[0])

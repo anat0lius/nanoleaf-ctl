@@ -3,6 +3,7 @@
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -23,6 +24,8 @@ PREVIEW_STATE_PATH = STATE_DIR / "nanoleaf-preview.json"
 PREVIEW_PID_PATH = STATE_DIR / "nanoleaf-preview.pid"
 INTENT_STATE_PATH = STATE_DIR / "nanoleaf-power-intent.json"
 SCENE_TYPES_PATH = STATE_DIR / "nanoleaf-scene-types.json"
+# Lives in the runtime dir so it disappears at logout/reboot: "restored once per login".
+SESSION_MARKER_PATH = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "nanoleaf-omarchy-session-started"
 
 OMARCHY_CURRENT_THEME_NAME = STATE_DIR / "current/theme.name"
 OMARCHY_CURRENT_THEME_COLORS = STATE_DIR / "current/theme/colors.toml"
@@ -54,6 +57,21 @@ def remove(path: Path) -> None:
         path.unlink()
     except OSError:
         pass
+
+
+def spawn_worker(*args: str) -> None:
+    """Runs `python -m nanoleaf_omarchy <args>` detached.
+
+    Puts this package's parent directory on PYTHONPATH so the worker also starts when the
+    package is run straight from a checkout instead of being installed.
+    """
+    env = dict(os.environ)
+    root = str(Path(__file__).resolve().parent.parent)
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [root, env.get("PYTHONPATH")]))
+    subprocess.Popen(
+        [sys.executable, "-m", "nanoleaf_omarchy", *args],
+        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+    )
 
 
 def is_pid_alive(pid: int) -> bool:

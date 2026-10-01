@@ -6,7 +6,7 @@ After=graphical-session.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=%h/.local/bin/nanoleaf-ctl session-start
+ExecStart=%h/.local/bin/nanoleaf-ctl session-start --once
 ExecStop=%h/.local/bin/nanoleaf-ctl session-end
 TimeoutStopSec=6
 

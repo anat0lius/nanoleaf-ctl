@@ -14,9 +14,22 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  Component.onCompleted: root.refresh()
+  // The controller ships inside this plugin: run it with the system python, no install step.
+  readonly property string pluginDir: decodeURIComponent(Qt.resolvedUrl(".").toString().replace("file://", "")).replace(/\/$/, "")
 
-  property string ctlCommand: "nanoleaf-ctl"
+  function ctl(args) {
+    return ["env", "PYTHONPATH=" + root.pluginDir + "/src", "python3", "-m", "nanoleaf_omarchy"].concat(args)
+  }
+
+  Component.onCompleted: {
+    root.refresh()
+    // Restore the last state once per login (the shell starts with the session).
+    runScript(["session-start", "--once"])
+  }
+
+  property bool configured: true
+  property bool pairing: false
+  property string pairMessage: ""
 
   property bool isOnline: false
   property bool isOn: false
@@ -42,8 +55,14 @@ Panel {
   }
 
   function runScript(args) {
-    var cmd = [root.ctlCommand].concat(args)
-    Quickshell.execDetached(cmd)
+    Quickshell.execDetached(root.ctl(args))
+  }
+
+  function startPairing() {
+    if (pairProc.running) return
+    root.pairing = true
+    root.pairMessage = ""
+    pairProc.running = true
   }
 
   function refresh() {
@@ -51,6 +70,7 @@ Panel {
   }
 
   function togglePower() {
+    if (!root.configured) return
     root.isOn = !root.isOn
     if (!root.isOn) root.isMirroring = false
     runScript(["toggle"])
@@ -155,7 +175,7 @@ Panel {
 
   Process {
     id: statusProc
-    command: [root.ctlCommand, "status", "--json"]
+    command: root.ctl(["status", "--json"])
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -163,6 +183,11 @@ Panel {
         if (!raw) return
         try {
           var data = JSON.parse(raw)
+          root.configured = data.configured !== false
+          if (!root.configured) {
+            root.isOnline = false
+            return
+          }
           root.isOnline = true
           root.isOn = !!data.on
           root.brightness = (data.brightness !== undefined) ? data.brightness : 0
@@ -190,6 +215,45 @@ Panel {
     }
   }
 
+  Process {
+    id: pairProc
+    command: root.ctl(["pair", "--timeout", "60"])
+    stdout: StdioCollector {
+      id: pairOut
+      waitForEnd: true
+    }
+    onExited: function(exitCode) {
+      root.pairing = false
+      if (exitCode === 0) {
+        root.pairMessage = ""
+        root.refresh()
+      } else {
+        var lines = String(pairOut.text || "").trim().split("\n")
+        root.pairMessage = lines[lines.length - 1] || "Pairing failed."
+      }
+    }
+  }
+
+  // Follow Omarchy theme changes (locked: re-sync palette; unlocked: brief preview).
+  property string lastThemeSlug: ""
+  FileView {
+    id: themeFile
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme.name"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      var slug = String(text() || "").trim()
+      var previous = root.lastThemeSlug
+      root.lastThemeSlug = slug
+      // The first read is just startup, not a theme change.
+      if (previous && slug && slug !== previous && root.configured) {
+        root.runScript(["theme-change", slug])
+        statusDelayTimer.restart()
+      }
+    }
+  }
+
   BarIconButton {
     id: button
     anchors.fill: parent
@@ -199,7 +263,7 @@ Panel {
     activeColor: Color.accent
     dimmed: !root.isOn
     slotSize: Style.bar.iconSlot
-    tooltipText: root.isOnline
+    tooltipText: !root.configured ? "Nanoleaf: Not set up" : root.isOnline
       ? (root.deviceName + ": " + (root.isOn ? (root.isMirroring ? ("Mirroring " + root.mirrorDisplay) : (root.isThemeSynced ? ("Theme: " + root.themeName) : ((root.currentScene ? root.currentScene + " · " : "") + root.brightness + "%"))) : "Off"))
       : "Nanoleaf: Offline"
 
@@ -233,8 +297,53 @@ Panel {
         width: parent.width
         spacing: Style.space(12)
 
+        // ---------- First run: pairing ----------
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+          visible: !root.configured
+
+          PanelSectionHeader {
+            text: "SET UP NANOLEAF"
+            foreground: root.themeForeground
+            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: root.pairing
+              ? "Hold the power button on the controller for 5-7 seconds, until the LED starts flashing, then release it."
+              : "Pair this computer with your Nanoleaf controller. It must be on the same network."
+            color: root.themeForeground
+            font.pixelSize: Style.font.body
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          }
+
+          Text {
+            width: parent.width
+            visible: root.pairMessage !== ""
+            wrapMode: Text.WordWrap
+            text: root.pairMessage
+            color: Color.accent
+            font.pixelSize: Style.font.caption
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          }
+
+          Button {
+            width: parent.width
+            text: root.pairing ? "Waiting for the controller…" : (root.pairMessage ? "Try again" : "Pair")
+            selected: root.pairing
+            fontSize: Style.font.caption
+            bordered: true
+            foreground: root.themeForeground
+            onClicked: root.startPairing()
+          }
+        }
+
         // ---------- Hero: Icon, Name & Toggle ----------
         Item {
+          visible: root.configured
           width: parent.width
           implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, powerSwitch.implicitHeight)
 
@@ -302,11 +411,13 @@ Panel {
         }
 
         PanelSeparator {
+          visible: root.configured
           foreground: root.themeForeground
         }
 
         // ---------- Brightness Slider ----------
         Column {
+          visible: root.configured
           width: parent.width
           spacing: Style.space(6)
           opacity: root.isOn ? 1.0 : 0.5
@@ -370,11 +481,13 @@ Panel {
         }
 
         PanelSeparator {
+          visible: root.configured
           foreground: root.themeForeground
         }
 
         // ---------- Color Temperature Quick Buttons ----------
         Column {
+          visible: root.configured
           width: parent.width
           spacing: Style.space(8)
           opacity: root.isOn ? 1.0 : 0.5
@@ -412,11 +525,13 @@ Panel {
         }
 
         PanelSeparator {
+          visible: root.configured
           foreground: root.themeForeground
         }
 
         // ---------- Screen Mirror Section ----------
         Column {
+          visible: root.configured
           width: parent.width
           spacing: Style.space(8)
           opacity: root.isOn ? 1.0 : 0.5
@@ -490,11 +605,13 @@ Panel {
         }
 
         PanelSeparator {
+          visible: root.configured
           foreground: root.themeForeground
         }
 
         // ---------- Theme Sync Section ----------
         Column {
+          visible: root.configured
           width: parent.width
           spacing: Style.space(8)
           opacity: root.isOn ? 1.0 : 0.5
@@ -553,11 +670,13 @@ Panel {
         }
 
         PanelSeparator {
+          visible: root.configured
           foreground: root.themeForeground
         }
 
         // ---------- Scenes Section ----------
         Column {
+          visible: root.configured
           width: parent.width
           spacing: Style.space(8)
 

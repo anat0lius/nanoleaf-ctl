@@ -40,8 +40,15 @@ def _value(state: dict, key: str, default=0):
     return state.get(key, {}).get("value", default)
 
 
+def is_configured() -> bool:
+    cfg = load_config()
+    return bool(cfg.get("ip") and cfg.get("token"))
+
+
 def get_status() -> dict:
     cfg = load_config()
+    if not is_configured():
+        raise RuntimeError("Not paired with a Nanoleaf device. Run: nanoleaf-ctl pair")
     info = api_request("GET", "", config=cfg)
     if not isinstance(info, dict):
         raise RuntimeError("Invalid response from device")
@@ -56,6 +63,7 @@ def get_status() -> dict:
 
     effects_list = effects.get("effectsList", [])
     return {
+        "configured": True,
         "name": cfg.get("friendly_name") or info.get("name", "Nanoleaf"),
         "rawName": info.get("name", ""),
         "model": info.get("model", ""),

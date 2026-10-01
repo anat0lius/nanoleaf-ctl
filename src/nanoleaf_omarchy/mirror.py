@@ -19,6 +19,7 @@ from .state import (
     read_json,
     remove,
     save_power_intent,
+    spawn_worker,
     unlock_theme_sync,
     write_json,
 )
@@ -241,11 +242,7 @@ def start_mirror(display=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME) -
             return True
         stop_mirror(restore_state=False)
 
-    subprocess.Popen(
-        [sys.executable, "-m", "nanoleaf_omarchy", "mirror-run",
-         "--fps", str(fps), "--trans-time", str(trans_time), "--display", target_display],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
-    )
+    spawn_worker("mirror-run", "--fps", str(fps), "--trans-time", str(trans_time), "--display", target_display)
 
     for _ in range(15):
         time.sleep(0.1)

@@ -2,7 +2,6 @@
 
 import colorsys
 import os
-import subprocess
 import sys
 import time
 
@@ -12,6 +11,7 @@ from .mirror import get_mirror_status, start_mirror, stop_mirror
 from .state import (
     PREVIEW_PID_PATH,
     PREVIEW_STATE_PATH,
+    SESSION_MARKER_PATH,
     cancel_preview,
     get_current_theme_slug,
     get_theme_colors,
@@ -23,6 +23,7 @@ from .state import (
     read_preview_pid,
     save_power_intent,
     save_theme_sync_status,
+    spawn_worker,
     write_json,
 )
 
@@ -165,10 +166,7 @@ def on_theme_change(theme_slug: str | None) -> None:
 
     apply_theme_palette(slug)
 
-    subprocess.Popen(
-        [sys.executable, "-m", "nanoleaf_omarchy", "theme-preview-restore", "--delay", str(PREVIEW_SECONDS)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
-    )
+    spawn_worker("theme-preview-restore", "--delay", str(PREVIEW_SECONDS))
     print(f"Theme '{slug}' previewing for {PREVIEW_SECONDS}s...")
 
 
@@ -229,22 +227,32 @@ def _restore(st: dict, cfg: dict) -> None:
         print("Nanoleaf powered ON on session start.")
 
 
-def on_session_start(retries: int = 8, retry_interval: int = 2) -> None:
-    """Called on PC boot / session start."""
-    st = load_power_intent()
-    if st.get("user_intent_off", False):
-        print("Session start: last user state was OFF, skipping auto turn-on.")
+def on_session_start(retries: int = 8, retry_interval: int = 2, once: bool = False) -> None:
+    """Called on PC boot / session start.
+
+    With ``once``, does nothing if the state was already restored during this login, so it is
+    safe to call from something that can start more than once (e.g. a shell restart).
+    """
+    if once and SESSION_MARKER_PATH.exists():
+        print("Session start: already restored during this login, skipping.")
         return
 
-    print(f"Session start: last user state was ON ({st.get('mode', 'scene')}), restoring Nanoleaf...")
     cfg = load_config()
     if not cfg.get("ip"):
         print("Nanoleaf IP not configured, skipping.")
         return
 
+    st = load_power_intent()
+    if st.get("user_intent_off", False):
+        print("Session start: last user state was OFF, skipping auto turn-on.")
+        SESSION_MARKER_PATH.touch()
+        return
+
+    print(f"Session start: last user state was ON ({st.get('mode', 'scene')}), restoring Nanoleaf...")
     for attempt in range(retries):
         try:
             _restore(st, cfg)
+            SESSION_MARKER_PATH.touch()
             return
         except Exception as e:
             if attempt < retries - 1:

@@ -1,3 +1,0 @@
-#!/bin/bash
-# Omarchy post-boot hook: ensure Nanoleaf powers on if user intent was ON
-nanoleaf-ctl session-start
