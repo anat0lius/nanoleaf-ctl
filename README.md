@@ -1,12 +1,23 @@
 # nanoleaf-ctl
 
-Control Nanoleaf light panels from the command line:
+Control Nanoleaf light panels from your Linux desktop. `nanoleaf-ctl` is a standalone command-line tool, and
+an optional [Quickshell](https://quickshell.org) bar widget for the Omarchy shell gives you the same controls
+in a panel:
 
-- power, brightness, scenes and white temperature
+<img src="docs/widget.png" alt="Nanoleaf bar widget panel" width="280">
+
+- power, brightness, white temperature and scenes
 - screen mirroring on any detected display
 - palette sync: lock the lights to a color palette (for example your desktop theme), or preview a new one
   briefly and then restore
 - restore the last state at login
+
+> [!NOTE]
+> The widget handles first-run pairing from the panel (hides mirroring and theme sync when they
+> aren't available) and ships with its own copy of the command-line tool, so there is nothing else to install.
+> Install it from the Omarchy plugin page (link coming soon).
+
+## Requirements
 
 Python 3.10+, standard library only: nothing to `pip install` to run it. A few optional system tools
 enable specific features:
@@ -122,6 +133,7 @@ systemctl --user enable --now nanoleaf-session.service
 
 - `src/nanoleaf_ctl/` — the Python package (`cli.py` is the entry point)
 - `manifest.json`, `Panel.qml` — Quickshell bar widget; it runs the package from `src/` directly
+- `docs/` — screenshots
 - `contrib/` — optional extras (systemd user service)
 - `tests/`
 
