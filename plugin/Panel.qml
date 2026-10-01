@@ -65,6 +65,7 @@ Panel {
     root.isMirroring = !root.isMirroring
     if (root.isMirroring) {
       root.isOn = true
+      root.isThemeSynced = false
       runScript(root.mirrorDisplay ? ["mirror", "start", "--display", root.mirrorDisplay] : ["mirror", "start"])
     } else {
       runScript(["mirror", "stop"])
@@ -467,6 +468,7 @@ Panel {
           Row {
             width: parent.width
             spacing: Style.space(6)
+            visible: root.displays.length > 1
 
             Repeater {
               model: root.displays
@@ -527,7 +529,7 @@ Panel {
 
             Text {
               anchors.verticalCenter: parent.verticalCenter
-              text: root.isThemeSynced ? "Locked" : "2s Preview"
+              text: root.isThemeSynced ? "Locked" : ""
               color: root.isThemeSynced ? Color.accent : Qt.darker(root.themeForeground || Color.foreground, 1.4)
               font.pixelSize: Style.font.caption
               font.family: root.bar ? root.bar.fontFamily : Style.font.family

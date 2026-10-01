@@ -19,6 +19,7 @@ from .state import (
     read_json,
     remove,
     save_power_intent,
+    unlock_theme_sync,
     write_json,
 )
 
@@ -232,6 +233,7 @@ def start_mirror(display=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME) -
     target_display = mon["name"]
     save_power_intent(user_intent_off=False, mode="mirror", mirror_display=target_display)
     cancel_preview()
+    unlock_theme_sync()
     st = get_mirror_status()
     if st.get("active"):
         if st.get("display") == target_display:
