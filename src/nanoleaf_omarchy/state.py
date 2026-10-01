@@ -85,14 +85,11 @@ def save_config(cfg: dict) -> None:
 # intent
 # ============================================================================
 
-DEFAULT_SCENE = "Golden Hour"
-
 
 def load_power_intent() -> dict:
     return read_json(INTENT_STATE_PATH) or {
         "user_intent_off": False,
         "mode": "scene",
-        "scene": DEFAULT_SCENE,
     }
 
 
@@ -120,14 +117,13 @@ def get_user_power_intent() -> bool:
 # theme_state
 # ============================================================================
 
-DEFAULT_THEME = "gruvbox"
-
 
 def get_current_theme_slug() -> str:
+    """Current Omarchy theme slug, or "" if it can't be determined."""
     try:
         return OMARCHY_CURRENT_THEME_NAME.read_text(encoding="utf-8").strip()
     except OSError:
-        return DEFAULT_THEME
+        return ""
 
 
 def get_theme_colors(theme_slug: str | None = None) -> dict:

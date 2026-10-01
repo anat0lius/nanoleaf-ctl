@@ -1,7 +1,7 @@
 """Direct device controls: status, power, brightness, scenes, color."""
 
 from .api import api_request, set_power_state
-from .mirror import get_mirror_status, stop_mirror
+from .mirror import get_hyprland_monitors, get_mirror_status, stop_mirror
 from .state import (
     cancel_preview,
     get_theme_sync_status,
@@ -31,7 +31,7 @@ def get_status() -> dict:
         current_effect = f"Theme: {theme_st.get('theme', 'Omarchy').replace('-', ' ').title()}"
 
     return {
-        "name": cfg.get("friendly_name") or info.get("name", "Nanoleaf Blocks"),
+        "name": cfg.get("friendly_name") or info.get("name", "Nanoleaf"),
         "rawName": info.get("name", ""),
         "model": info.get("model", ""),
         "serialNo": info.get("serialNo", ""),
@@ -46,6 +46,7 @@ def get_status() -> dict:
         "effectsList": effects.get("effectsList", []),
         "panelLayout": info.get("panelLayout", {}),
         "mirror": get_mirror_status(),
+        "displays": [m["name"] for m in get_hyprland_monitors()],
         "themeSync": theme_st,
     }
 

@@ -138,7 +138,7 @@ def pair(ip=None, port=DEFAULT_PORT, timeout=45) -> bool:
                 print(f"🎉 Successfully paired! Auth token saved to {CONFIG_PATH}")
                 info = api_request("GET", "", config=cfg)
                 if isinstance(info, dict):
-                    cfg["name"] = info.get("name", cfg.get("name", "Nanoleaf Blocks"))
+                    cfg["name"] = info.get("name", cfg.get("name", "Nanoleaf"))
                     cfg["model"] = info.get("model", cfg.get("model", ""))
                     cfg["serialNo"] = info.get("serialNo", "")
                     save_config(cfg)

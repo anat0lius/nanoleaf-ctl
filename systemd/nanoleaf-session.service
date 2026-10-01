@@ -6,8 +6,8 @@ After=graphical-session.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/home/ender/.local/bin/nanoleaf-ctl session-start
-ExecStop=/home/ender/.local/bin/nanoleaf-ctl session-end
+ExecStart=%h/.local/bin/nanoleaf-ctl session-start
+ExecStop=%h/.local/bin/nanoleaf-ctl session-end
 TimeoutStopSec=6
 
 [Install]

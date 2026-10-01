@@ -22,7 +22,6 @@ from .state import (
     write_json,
 )
 
-DEFAULT_DISPLAY = "DP-1"
 EXT_CONTROL_PORT = 60222
 DEFAULT_FPS = 8
 DEFAULT_TRANS_TIME = 4
@@ -38,12 +37,13 @@ def get_hyprland_monitors() -> list[dict]:
         return []
 
 
-def get_target_monitor(requested_name: str | None = None) -> dict:
+def get_target_monitor(requested_name: str | None = None) -> dict | None:
+    """Picks the requested display, else the configured `mirror_display`, else the focused one."""
     monitors = get_hyprland_monitors()
     if not monitors:
-        return {"name": DEFAULT_DISPLAY, "width": 2560, "height": 1440}
-    for wanted in (lambda m: requested_name and m.get("name") == requested_name,
-                   lambda m: m.get("name") == DEFAULT_DISPLAY,
+        return None
+    preferred = requested_name or load_config().get("mirror_display")
+    for wanted in (lambda m: preferred and m.get("name") == preferred,
                    lambda m: m.get("focused")):
         for m in monitors:
             if wanted(m):
@@ -147,9 +147,11 @@ def run_mirror_loop(display_name=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS
         return
 
     mon = get_target_monitor(display_name)
-    display = mon.get("name", DEFAULT_DISPLAY)
-    w = mon.get("width", 2560)
-    h = mon.get("height", 1440)
+    if not mon:
+        sys.stderr.write("No displays detected (is Hyprland running?)\n")
+        return
+    display = mon["name"]
+    w, h = mon["width"], mon["height"]
 
     try:
         targets = compute_screen_panel_targets(w, h)
@@ -224,7 +226,10 @@ def run_mirror_loop(display_name=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS
 # --- Control (called from the CLI process) -----------------------------------------
 
 def start_mirror(display=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME) -> bool:
-    target_display = display or get_target_monitor().get("name", DEFAULT_DISPLAY)
+    mon = get_target_monitor(display)
+    if not mon:
+        raise RuntimeError("No displays detected (is Hyprland running?)")
+    target_display = mon["name"]
     save_power_intent(user_intent_off=False, mode="mirror", mirror_display=target_display)
     cancel_preview()
     st = get_mirror_status()

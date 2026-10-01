@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _json_flag(sub.add_parser("scenes", help="List all available scenes"))
 
-    p = sub.add_parser("ct", help="Set color temperature (Kelvin, e.g. 2700-6500)")
+    p = sub.add_parser("ct", help="Set color temperature (Kelvin)")
     p.add_argument("kelvin", type=int, help="Color temperature in Kelvin")
 
     p_mirror = sub.add_parser("mirror", help="Manage screen mirroring")
@@ -46,13 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
     m_sub = p_mirror.add_subparsers(dest="mirror_command")
 
     p = m_sub.add_parser("start", help="Start screen mirror")
-    p.add_argument("--display", help="Target display (e.g. DP-2, DP-1)")
+    p.add_argument("--display", help="Target display (see `mirror displays`; default: configured or focused)")
     p.add_argument("--fps", type=int, default=mirror.DEFAULT_FPS, help="Capture FPS (default: 8)")
     p.add_argument("--trans-time", type=int, default=mirror.DEFAULT_TRANS_TIME,
                    help="Smooth transition time in deciseconds (default: 4 = 400ms)")
     m_sub.add_parser("stop", help="Stop screen mirror")
     p = m_sub.add_parser("toggle", help="Toggle screen mirror")
-    p.add_argument("--display", help="Target display (e.g. DP-2, DP-1)")
+    p.add_argument("--display", help="Target display (see `mirror displays`; default: configured or focused)")
     _json_flag(m_sub.add_parser("status", help="Check screen mirror status"))
     _json_flag(m_sub.add_parser("displays", help="List available displays"))
 

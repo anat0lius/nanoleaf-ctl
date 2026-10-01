@@ -23,10 +23,11 @@ Panel {
   property int brightness: 0
   property string currentScene: ""
   property var scenes: []
-  property string deviceName: "Nanoleaf Blocks"
+  property string deviceName: "Nanoleaf"
   property string model: ""
   property bool isMirroring: false
-  property string mirrorDisplay: "DP-1"
+  property string mirrorDisplay: ""
+  property var displays: []
   property int currentCt: 0
   property string colorMode: ""
   property bool isThemeSynced: false
@@ -64,7 +65,7 @@ Panel {
     root.isMirroring = !root.isMirroring
     if (root.isMirroring) {
       root.isOn = true
-      runScript(["mirror", "start", "--display", root.mirrorDisplay])
+      runScript(root.mirrorDisplay ? ["mirror", "start", "--display", root.mirrorDisplay] : ["mirror", "start"])
     } else {
       runScript(["mirror", "stop"])
     }
@@ -165,7 +166,7 @@ Panel {
           root.brightness = (data.brightness !== undefined) ? data.brightness : 0
           root.currentScene = data.currentEffect || ""
           root.scenes = data.effectsList || []
-          root.deviceName = data.name || "Nanoleaf Blocks"
+          root.deviceName = data.name || "Nanoleaf"
           root.model = data.model || ""
           root.currentCt = (data.ct !== undefined) ? data.ct : 0
           root.colorMode = data.colorMode || ""
@@ -173,6 +174,7 @@ Panel {
             root.currentScene = ""
           }
           root.isMirroring = !!(data.mirror && data.mirror.active)
+          root.displays = data.displays || []
           if (data.mirror && data.mirror.display) root.mirrorDisplay = data.mirror.display
           if (data.themeSync) {
             root.isThemeSynced = !!data.themeSync.synced
@@ -467,20 +469,17 @@ Panel {
             spacing: Style.space(6)
 
             Repeater {
-              model: [
-                { id: "DP-1", label: "DP-1 (Main)" },
-                { id: "DP-2", label: "DP-2 (Secondary)" }
-              ]
+              model: root.displays
 
               Button {
                 required property var modelData
-                width: (parent.width - Style.space(6)) / 2
-                text: modelData.label
-                selected: root.mirrorDisplay === modelData.id
+                width: (parent.width - Style.space(6) * (root.displays.length - 1)) / Math.max(1, root.displays.length)
+                text: modelData
+                selected: root.mirrorDisplay === modelData
                 fontSize: Style.font.caption
                 bordered: true
                 foreground: root.themeForeground
-                onClicked: root.setMirrorDisplay(modelData.id)
+                onClicked: root.setMirrorDisplay(modelData)
               }
             }
           }

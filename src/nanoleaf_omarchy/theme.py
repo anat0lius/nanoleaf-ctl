@@ -8,9 +8,8 @@ import time
 
 from .api import api_request, set_power_state
 from .controls import set_ct, set_scene
-from .mirror import DEFAULT_DISPLAY, get_mirror_status, start_mirror, stop_mirror
+from .mirror import get_mirror_status, start_mirror, stop_mirror
 from .state import (
-    DEFAULT_SCENE,
     PREVIEW_PID_PATH,
     PREVIEW_STATE_PATH,
     cancel_preview,
@@ -73,7 +72,7 @@ def apply_theme_palette(theme_slug: str | None = None) -> bool:
     payload = {
         "write": {
             "command": "display",
-            "animName": f"Theme: {slug.replace('-', ' ').title()}",
+            "animName": f"Theme: {(slug or 'omarchy').replace('-', ' ').title()}",
             "animType": "random",
             "colorType": "HSB",
             "palette": [hex_to_hsb(c) for c in palette_hexes],
@@ -103,14 +102,28 @@ def sync_theme(theme_slug: str | None = None) -> bool:
     return True
 
 
+def _previous_scene() -> str | None:
+    """Last scene the user picked, else the device's first regular scene."""
+    scene = load_power_intent().get("scene")
+    if scene:
+        return scene
+    try:
+        effects = api_request("GET", "effects/effectsList") or []
+    except Exception:
+        return None
+    return next((e for e in effects if not e.startswith(("*", "Theme:"))), None)
+
+
 def toggle_theme_sync() -> bool:
     """Toggles theme sync lock on/off."""
     st = get_theme_sync_status()
     if st.get("synced"):
         st["synced"] = False
         save_theme_sync_status(st)
-        set_scene(DEFAULT_SCENE)
-        print(f"Theme sync unlocked (restored {DEFAULT_SCENE})")
+        scene = _previous_scene()
+        if scene:
+            set_scene(scene)
+        print(f"Theme sync unlocked{f' (restored {scene})' if scene else ''}")
         return False
     sync_theme()
     return True
@@ -125,10 +138,10 @@ def _snapshot_state() -> None:
         write_json(PREVIEW_STATE_PATH, {
             "on": state.get("on", {}).get("value", True),
             "colorMode": state.get("colorMode", ""),
-            "ct": state.get("ct", {}).get("value", 6500),
+            "ct": state.get("ct", {}).get("value"),
             "scene": info.get("effects", {}).get("select", ""),
             "mirror_active": mirror_st.get("active", False),
-            "mirror_display": mirror_st.get("display", DEFAULT_DISPLAY),
+            "mirror_display": mirror_st.get("display"),
         })
     except Exception as e:
         sys.stderr.write(f"Snapshot error: {e}\n")
@@ -177,9 +190,9 @@ def run_preview_restore(delay: int = PREVIEW_SECONDS) -> None:
         try:
             scene = snapshot.get("scene", "")
             if snapshot.get("mirror_active"):
-                start_mirror(display=snapshot.get("mirror_display", DEFAULT_DISPLAY))
-            elif snapshot.get("colorMode") == "ct":
-                set_ct(snapshot.get("ct", 6500))
+                start_mirror(display=snapshot.get("mirror_display"))
+            elif snapshot.get("colorMode") == "ct" and snapshot.get("ct"):
+                set_ct(snapshot["ct"])
             elif scene and not scene.startswith("*"):
                 set_scene(scene)
 
@@ -198,18 +211,17 @@ def run_preview_restore(delay: int = PREVIEW_SECONDS) -> None:
 def _restore(st: dict, cfg: dict) -> None:
     mode = st.get("mode", "scene")
     if mode == "mirror":
-        disp = st.get("mirror_display", DEFAULT_DISPLAY)
-        start_mirror(display=disp)
-        print(f"Nanoleaf restored screen mirror on {disp} on session start.")
+        start_mirror(display=st.get("mirror_display"))
+        print("Nanoleaf restored screen mirror on session start.")
     elif mode == "theme":
         sync_theme()
         print("Nanoleaf restored theme sync on session start.")
-    elif mode == "ct":
-        kelvin = st.get("ct", 6500)
+    elif mode == "ct" and st.get("ct"):
+        kelvin = st["ct"]
         set_ct(kelvin)
         print(f"Nanoleaf restored white temperature {kelvin}K on session start.")
-    elif mode == "scene":
-        scene = st.get("scene", DEFAULT_SCENE)
+    elif mode == "scene" and st.get("scene"):
+        scene = st["scene"]
         set_scene(scene)
         print(f"Nanoleaf restored scene '{scene}' on session start.")
     else:
