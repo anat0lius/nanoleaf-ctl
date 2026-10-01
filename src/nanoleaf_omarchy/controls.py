@@ -3,13 +3,37 @@
 from .api import api_request, set_power_state
 from .mirror import get_hyprland_monitors, get_mirror_status, stop_mirror
 from .state import (
+    SCENE_TYPES_PATH,
     cancel_preview,
     get_theme_sync_status,
     load_config,
+    read_json,
     save_power_intent,
     set_user_power_intent,
     unlock_theme_sync,
+    write_json,
 )
+
+
+def get_music_scenes(names: list[str]) -> list[str]:
+    """Scenes that react to music (the device marks them `pluginType: rhythm`).
+
+    The device only reports this per scene, so results are cached by scene name.
+    """
+    cache = read_json(SCENE_TYPES_PATH) or {}
+    types = {n: cache[n] for n in names if n in cache}
+    for name in names:
+        if name in types:
+            continue
+        try:
+            details = api_request("PUT", "effects", {"write": {"command": "request", "animName": name}})
+        except RuntimeError:
+            continue  # unknown for now, retried on the next status call
+        if isinstance(details, dict):
+            types[name] = details.get("pluginType", "")
+    if types != cache:
+        write_json(SCENE_TYPES_PATH, types)
+    return [n for n in names if types.get(n) == "rhythm"]
 
 
 def _value(state: dict, key: str, default=0):
@@ -30,6 +54,7 @@ def get_status() -> dict:
     if (current_effect == "*Dynamic*" or current_effect.startswith("Theme:")) and theme_st.get("synced"):
         current_effect = f"Theme: {theme_st.get('theme', 'Omarchy').replace('-', ' ').title()}"
 
+    effects_list = effects.get("effectsList", [])
     return {
         "name": cfg.get("friendly_name") or info.get("name", "Nanoleaf"),
         "rawName": info.get("name", ""),
@@ -43,7 +68,8 @@ def get_status() -> dict:
         "ct": _value(state, "ct"),
         "colorMode": state.get("colorMode", ""),
         "currentEffect": current_effect,
-        "effectsList": effects.get("effectsList", []),
+        "effectsList": effects_list,
+        "musicScenes": get_music_scenes(effects_list),
         "panelLayout": info.get("panelLayout", {}),
         "mirror": get_mirror_status(),
         "displays": [m["name"] for m in get_hyprland_monitors()],

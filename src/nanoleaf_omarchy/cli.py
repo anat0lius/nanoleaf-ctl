@@ -139,13 +139,14 @@ def _cmd_scene(a):
 def _cmd_scenes(a):
     st = controls.get_status()
     effects, current = st.get("effectsList", []), st.get("currentEffect", "")
+    music = st.get("musicScenes", [])
     if a.json:
-        print(json.dumps({"current": current, "scenes": effects}, indent=2))
+        print(json.dumps({"current": current, "scenes": effects, "music": music}, indent=2))
         return
     print(f"Current Scene: {current}")
-    print("Available Scenes:")
+    print("Available Scenes (♪ = reacts to music):")
     for eff in effects:
-        print(f"{'* ' if eff == current else '  '}{eff}")
+        print(f"{'* ' if eff == current else '  '}{eff}{' ♪' if eff in music else ''}")
 
 
 def _cmd_ct(a):

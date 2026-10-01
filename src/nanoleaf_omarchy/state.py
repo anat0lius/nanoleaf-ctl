@@ -22,6 +22,7 @@ THEME_STATE_PATH = STATE_DIR / "nanoleaf-theme.json"
 PREVIEW_STATE_PATH = STATE_DIR / "nanoleaf-preview.json"
 PREVIEW_PID_PATH = STATE_DIR / "nanoleaf-preview.pid"
 INTENT_STATE_PATH = STATE_DIR / "nanoleaf-power-intent.json"
+SCENE_TYPES_PATH = STATE_DIR / "nanoleaf-scene-types.json"
 
 OMARCHY_CURRENT_THEME_NAME = STATE_DIR / "current/theme.name"
 OMARCHY_CURRENT_THEME_COLORS = STATE_DIR / "current/theme/colors.toml"

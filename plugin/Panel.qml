@@ -23,6 +23,7 @@ Panel {
   property int brightness: 0
   property string currentScene: ""
   property var scenes: []
+  property var musicScenes: []
   property string deviceName: "Nanoleaf"
   property string model: ""
   property bool isMirroring: false
@@ -167,6 +168,7 @@ Panel {
           root.brightness = (data.brightness !== undefined) ? data.brightness : 0
           root.currentScene = data.currentEffect || ""
           root.scenes = data.effectsList || []
+          root.musicScenes = data.musicScenes || []
           root.deviceName = data.name || "Nanoleaf"
           root.model = data.model || ""
           root.currentCt = (data.ct !== undefined) ? data.ct : 0
@@ -592,7 +594,7 @@ Panel {
               Text {
                 anchors.left: parent.left
                 anchors.leftMargin: Style.space(10)
-                anchors.right: parent.right
+                anchors.right: musicIcon.visible ? musicIcon.left : parent.right
                 anchors.rightMargin: Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
                 text: modelData
@@ -601,6 +603,19 @@ Panel {
                 font.pixelSize: Style.font.body
                 font.bold: modelData === root.currentScene
                 elide: Text.ElideRight
+              }
+
+              Text {
+                id: musicIcon
+                visible: root.musicScenes.indexOf(modelData) !== -1
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                text: "󰝚"
+                color: modelData === root.currentScene ? sceneRow.accent : sceneRow.foreground
+                opacity: 0.7
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.pixelSize: Style.font.body
               }
 
               MouseArea {
