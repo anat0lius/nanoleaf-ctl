@@ -17,6 +17,25 @@ in a panel:
 > aren't available) and ships with its own copy of the command-line tool, so there is nothing else to install.
 > Install it from the Omarchy plugin page (link coming soon).
 
+## Install as an Omarchy plugin
+
+```sh
+omarchy plugin add https://github.com/anat0lius/nanoleaf-ctl --enable
+```
+
+Open the widget in the bar and follow the pairing steps. Update with `omarchy plugin update`.
+
+## Uninstall
+
+If you turned on "Auto on/off" in the widget, turn it off first (it installs a systemd user unit that
+points at the plugin). Then:
+
+```sh
+omarchy plugin remove io.github.anat0lius.nanoleaf
+```
+
+To also forget the pairing and saved state, delete `~/.config/nanoleaf` and `~/.local/state/nanoleaf`.
+
 ## Requirements
 
 Python 3.10+, standard library only: nothing to `pip install` to run it. A few optional system tools
@@ -78,6 +97,9 @@ new colors, otherwise it previews them for 2 seconds and restores whatever the l
 
 ## Configuration
 
+The plugin changes nothing on your system until you ask: `pair` writes the config below, and the systemd
+user unit is written only when you turn on "Auto on/off" (or run `session-service enable`).
+
 `~/.config/nanoleaf/config.json` (under `$XDG_CONFIG_HOME`) is written by `pair`. Runtime state lives in
 `$XDG_STATE_HOME/nanoleaf/`. Optional config keys:
 
@@ -135,3 +157,7 @@ new colors, otherwise it previews them for 2 seconds and restores whatever the l
 uv run pytest
 uv run ruff check
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).
