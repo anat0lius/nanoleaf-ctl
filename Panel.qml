@@ -23,7 +23,7 @@ Panel {
 
   Component.onCompleted: {
     root.refresh()
-    sessionProc.running = true
+    root.refreshSession()
   }
 
   property bool configured: true
@@ -112,6 +112,10 @@ Panel {
     if (!statusProc.running) statusProc.running = true
   }
 
+  function refreshSession() {
+    if (!sessionProc.running) sessionProc.running = true
+  }
+
   function togglePower() {
     if (!root.configured) return
     root.isOn = !root.isOn
@@ -189,7 +193,10 @@ Panel {
   }
 
   onOpenedChanged: {
-    if (opened) refresh()
+    if (opened) {
+      refresh()
+      refreshSession()
+    }
   }
 
   Timer {
@@ -205,14 +212,17 @@ Panel {
     interval: 600
     running: true
     repeat: false
-    onTriggered: root.refresh()
+    onTriggered: {
+      root.refresh()
+      root.refreshSession()
+    }
   }
 
   Timer {
     id: sessionDelayTimer
     interval: 1500
     repeat: false
-    onTriggered: if (!sessionProc.running) sessionProc.running = true
+    onTriggered: root.refreshSession()
   }
 
   Process {
@@ -541,6 +551,60 @@ Panel {
           foreground: root.themeForeground
         }
 
+        // ---------- Login / Logout Section ----------
+        Row {
+          visible: root.ready && root.sessionAvailable
+          width: parent.width
+
+          HoverHandler { id: sessionHover }
+
+          PanelToolTip {
+            visible: sessionHover.hovered
+            text: "On at login, off at logout"
+            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+          }
+
+          Column {
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width - sessionSwitch.width - Style.space(12)
+            spacing: Style.space(2)
+
+            Row {
+              spacing: Style.space(6)
+
+              Text {
+                text: "󰐥"
+                color: root.sessionEnabled ? Color.accent : root.themeForeground
+                font.pixelSize: Style.font.icon
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                text: "Auto on/off"
+                color: root.sessionEnabled ? Color.accent : root.themeForeground
+                font.pixelSize: Style.font.body
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.bold: root.sessionEnabled
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+          }
+
+          ToggleSwitch {
+            id: sessionSwitch
+            anchors.verticalCenter: parent.verticalCenter
+            checked: root.sessionEnabled
+            foreground: root.themeForeground
+            onToggled: root.toggleSessionService()
+          }
+        }
+
+        PanelSeparator {
+          visible: root.ready && root.sessionAvailable
+          foreground: root.themeForeground
+        }
+
         // ---------- Brightness Slider ----------
         Column {
           visible: root.ready
@@ -665,6 +729,14 @@ Panel {
           Row {
             width: parent.width
 
+            HoverHandler { id: mirrorHover }
+
+            PanelToolTip {
+              visible: mirrorHover.hovered
+              text: root.isMirroring ? ("Active on " + root.mirrorDisplay) : "Sync lighting with display"
+              fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+            }
+
             Column {
               anchors.verticalCenter: parent.verticalCenter
               width: parent.width - mirrorSwitch.width - Style.space(12)
@@ -689,13 +761,6 @@ Panel {
                   font.bold: root.isMirroring
                   anchors.verticalCenter: parent.verticalCenter
                 }
-              }
-
-              Text {
-                text: root.isMirroring ? ("Active on " + root.mirrorDisplay) : "Sync lighting with display"
-                color: Qt.darker(root.themeForeground || Color.foreground, 1.4)
-                font.pixelSize: Style.font.caption
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
               }
             }
 
@@ -792,59 +857,6 @@ Panel {
             bordered: true
             foreground: root.themeForeground
             onClicked: root.toggleThemeSync()
-          }
-        }
-
-        PanelSeparator {
-          visible: root.ready && root.sessionAvailable
-          foreground: root.themeForeground
-        }
-
-        // ---------- Login / Logout Section ----------
-        Row {
-          visible: root.ready && root.sessionAvailable
-          width: parent.width
-
-          Column {
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - sessionSwitch.width - Style.space(12)
-            spacing: Style.space(2)
-
-            Row {
-              spacing: Style.space(6)
-
-              Text {
-                text: "󰐥"
-                color: root.sessionEnabled ? Color.accent : root.themeForeground
-                font.pixelSize: Style.font.icon
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Text {
-                text: "On at login, off at logout"
-                color: root.sessionEnabled ? Color.accent : root.themeForeground
-                font.pixelSize: Style.font.body
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                font.bold: root.sessionEnabled
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            Text {
-              text: "Restores your last state at login"
-              color: Qt.darker(root.themeForeground || Color.foreground, 1.4)
-              font.pixelSize: Style.font.caption
-              font.family: root.bar ? root.bar.fontFamily : Style.font.family
-            }
-          }
-
-          ToggleSwitch {
-            id: sessionSwitch
-            anchors.verticalCenter: parent.verticalCenter
-            checked: root.sessionEnabled
-            foreground: root.themeForeground
-            onToggled: root.toggleSessionService()
           }
         }
 
