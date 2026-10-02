@@ -1,9 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "nanoleaf",
+  "id": "io.github.anat0lius.nanoleaf",
   "name": "Nanoleaf",
   "version": "1.0.0",
-  "author": "ender",
+  "author": "anat0lius",
+  "license": "MIT",
   "description": "Nanoleaf light panels control widget and panel",
   "kinds": [
     "bar-widget"
