@@ -128,6 +128,9 @@ systemctl --user enable --now nanoleaf-session.service
 - **Pairing never completes:** hold the power button until the LED flashes, then release.
 - **`status` fails after the router or device IP changed:** run `nanoleaf-ctl pair --ip <new ip>`.
 - **Mirroring does nothing:** check that `grim` works and `nanoleaf-ctl mirror displays` lists your display.
+- **Lights aren't restored as expected after a restart:** check what was saved and what ran at login.
+  `~/.local/state/nanoleaf/power-intent.json` holds the last mode (`theme`, `scene`, `ct` or `mirror`).
+  `journalctl --user -b -u 'nanoleaf*'` shows which state was restored at login.
 
 ## Repository layout
 
