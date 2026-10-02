@@ -64,6 +64,7 @@ nanoleaf-ctl theme-sync --off       # unlock and restore the previous scene
 nanoleaf-ctl theme-change --name dawn --colors "#f9cc6c" "#a8a9eb"
 nanoleaf-ctl session-start --once   # restore last state (once per login)
 nanoleaf-ctl session-end            # turn off
+nanoleaf-ctl session-service enable # on at login, off at logout (systemd user unit); or: disable, status
 ```
 
 Every command that takes over the lights (scene, ct, mirror, theme sync) cancels the others, so only one
@@ -74,19 +75,6 @@ mode is active at a time.
 `theme-sync` locks the lights to a flowing animation of the colors you pass. `theme-change` is meant to be
 called by whatever changes your palette (a theme switcher, a script): if the lock is on it re-syncs to the
 new colors, otherwise it previews them for 2 seconds and restores whatever the lights were doing.
-
-### Session start / end
-
-`session-start --once` restores your last state (unless you turned the lights off) and does nothing if it
-already ran during this login. `session-end` turns the lights off. To switch the lights off at logout,
-install the optional user service (it runs `~/.local/bin/nanoleaf-ctl`, installed as in Quick start):
-
-```sh
-mkdir -p ~/.config/systemd/user
-cp contrib/systemd/nanoleaf-session.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now nanoleaf-session.service
-```
 
 ## Configuration
 
@@ -137,7 +125,6 @@ systemctl --user enable --now nanoleaf-session.service
 - `src/nanoleaf_ctl/` — the Python package (`cli.py` is the entry point)
 - `manifest.json`, `Panel.qml` — Quickshell bar widget; it runs the package from `src/` directly
 - `preview.png` — widget screenshot
-- `contrib/` — optional extras (systemd user service)
 - `tests/`
 
 ## Development

@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 
-from . import api, controls, mirror, theme
+from . import api, controls, mirror, service, theme
 from .api import DEFAULT_PORT
 from .state import get_theme_sync_status, get_user_power_intent, set_user_power_intent
 
@@ -82,7 +82,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--retries", type=int, default=8)
     p.add_argument("--interval", type=int, default=2)
     p.add_argument("--once", action="store_true", help="Skip if already restored during this login")
-    sub.add_parser("session-end", help="Auto turn-off on PC shutdown/logout")
+    p = sub.add_parser("session-end", help="Auto turn-off on PC shutdown/logout")
+    p.add_argument("--if-enabled", action="store_true", help="Do nothing unless session-service is enabled")
+
+    p = sub.add_parser("session-service", help="Restore the lights at login and turn them off at logout")
+    p.add_argument("action", nargs="?", choices=["enable", "disable", "status"], default="status")
+    _json_flag(p)
 
     p = sub.add_parser("power-intent", help="Check/set user power intent")
     p.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
@@ -237,7 +242,21 @@ def _cmd_session_start(a):
 
 
 def _cmd_session_end(a):
+    if a.if_enabled and not service.is_enabled():
+        return
     theme.on_session_end()
+
+
+def _cmd_session_service(a):
+    if a.action == "enable":
+        service.enable()
+    elif a.action == "disable":
+        service.disable()
+    enabled = service.is_enabled()
+    if a.json:
+        print(json.dumps({"available": service.available(), "enabled": enabled}))
+    else:
+        print(f"Session service: {'enabled' if enabled else 'disabled'}")
 
 
 def _cmd_power_intent(a):
@@ -268,6 +287,7 @@ COMMANDS = {
     "theme-status": _cmd_theme_status,
     "session-start": _cmd_session_start,
     "session-end": _cmd_session_end,
+    "session-service": _cmd_session_service,
     "power-intent": _cmd_power_intent,
 }
 

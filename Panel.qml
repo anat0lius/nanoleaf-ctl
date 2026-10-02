@@ -23,8 +23,7 @@ Panel {
 
   Component.onCompleted: {
     root.refresh()
-    // Restore the last state once per login (the shell starts with the session).
-    runScript(["session-start", "--once"])
+    sessionProc.running = true
   }
 
   property bool configured: true
@@ -55,6 +54,9 @@ Panel {
   property int currentCt: 0
   property string colorMode: ""
   property bool isThemeSynced: false
+  // Optional systemd user service: lights on at login, off at logout.
+  property bool sessionAvailable: false
+  property bool sessionEnabled: false
   property string themeName: ""
 
   readonly property color themeForeground: (root.bar && root.bar.barForeground) ? root.bar.barForeground : Color.foreground
@@ -165,6 +167,12 @@ Panel {
     statusDelayTimer.restart()
   }
 
+  function toggleSessionService() {
+    root.sessionEnabled = !root.sessionEnabled
+    runScript(["session-service", root.sessionEnabled ? "enable" : "disable"])
+    sessionDelayTimer.restart()
+  }
+
   function toggleThemeSync() {
     if (root.isThemeSynced) {
       root.isThemeSynced = false
@@ -198,6 +206,30 @@ Panel {
     running: true
     repeat: false
     onTriggered: root.refresh()
+  }
+
+  Timer {
+    id: sessionDelayTimer
+    interval: 1500
+    repeat: false
+    onTriggered: if (!sessionProc.running) sessionProc.running = true
+  }
+
+  Process {
+    id: sessionProc
+    command: root.ctl(["session-service", "status", "--json"])
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var data = JSON.parse(String(text || "").trim())
+          root.sessionAvailable = !!data.available
+          root.sessionEnabled = !!data.enabled
+        } catch (e) {
+          root.sessionAvailable = false
+        }
+      }
+    }
   }
 
   Timer {
@@ -760,6 +792,59 @@ Panel {
             bordered: true
             foreground: root.themeForeground
             onClicked: root.toggleThemeSync()
+          }
+        }
+
+        PanelSeparator {
+          visible: root.ready && root.sessionAvailable
+          foreground: root.themeForeground
+        }
+
+        // ---------- Login / Logout Section ----------
+        Row {
+          visible: root.ready && root.sessionAvailable
+          width: parent.width
+
+          Column {
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width - sessionSwitch.width - Style.space(12)
+            spacing: Style.space(2)
+
+            Row {
+              spacing: Style.space(6)
+
+              Text {
+                text: "󰐥"
+                color: root.sessionEnabled ? Color.accent : root.themeForeground
+                font.pixelSize: Style.font.icon
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                text: "On at login, off at logout"
+                color: root.sessionEnabled ? Color.accent : root.themeForeground
+                font.pixelSize: Style.font.body
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.bold: root.sessionEnabled
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            Text {
+              text: "Restores your last state at login"
+              color: Qt.darker(root.themeForeground || Color.foreground, 1.4)
+              font.pixelSize: Style.font.caption
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+            }
+          }
+
+          ToggleSwitch {
+            id: sessionSwitch
+            anchors.verticalCenter: parent.verticalCenter
+            checked: root.sessionEnabled
+            foreground: root.themeForeground
+            onToggled: root.toggleSessionService()
           }
         }
 
