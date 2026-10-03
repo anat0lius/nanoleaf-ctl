@@ -80,9 +80,20 @@ def is_pid_alive(pid: int) -> bool:
 # config
 # ============================================================================
 
+def _restrict(path: Path, mode: int) -> None:
+    """Best-effort chmod, so a config written by an older version stops being world-readable."""
+    try:
+        if path.stat().st_mode & 0o777 != mode:
+            path.chmod(mode)
+    except OSError:
+        pass
+
+
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
         return {}
+    _restrict(CONFIG_DIR, 0o700)
+    _restrict(CONFIG_PATH, 0o600)
     cfg = read_json(CONFIG_PATH)
     if cfg is None:
         sys.stderr.write(f"Error reading config: {CONFIG_PATH}\n")
@@ -91,7 +102,14 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
-    write_json(CONFIG_PATH, cfg)
+    """Writes the config, which holds the device's auth token: private to the user (0700 / 0600)."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    _restrict(CONFIG_DIR, 0o700)
+    tmp = CONFIG_PATH.with_name(CONFIG_PATH.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+    os.replace(tmp, CONFIG_PATH)
 
 
 # ============================================================================

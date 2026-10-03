@@ -15,7 +15,6 @@ in a panel:
 > [!NOTE]
 > The widget handles first-run pairing from the panel (hides mirroring and theme sync when they
 > aren't available) and ships with its own copy of the command-line tool, so there is nothing else to install.
-> Install it from the Omarchy plugin page (link coming soon).
 
 ## Install as an Omarchy plugin
 
