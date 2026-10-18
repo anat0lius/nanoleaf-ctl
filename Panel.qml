@@ -144,10 +144,11 @@ Panel {
   function setMirrorDisplay(disp) {
     if (root.mirrorDisplay === disp && root.isMirroring) return
     root.mirrorDisplay = disp
-    if (root.isMirroring) {
-      runScript(["mirror", "start", "--display", disp])
-      statusDelayTimer.restart()
-    }
+    root.isMirroring = true
+    root.isOn = true
+    root.isThemeSynced = false
+    runScript(["mirror", "start", "--display", disp])
+    statusDelayTimer.restart()
   }
 
   function selectScene(name) {
@@ -289,6 +290,7 @@ Panel {
           root.displays = data.displays || []
           root.canMirror = !!(data.capabilities && data.capabilities.mirror)
           if (data.mirror && data.mirror.display) root.mirrorDisplay = data.mirror.display
+          else if (!root.mirrorDisplay || root.displays.indexOf(root.mirrorDisplay) < 0) root.mirrorDisplay = root.displays[0] || ""
           if (data.themeSync) {
             root.isThemeSynced = !!data.themeSync.synced
             root.themeName = data.themeSync.theme || ""
@@ -773,23 +775,61 @@ Panel {
             }
           }
 
+          // Radio list: the dot is only filled for the display that is actually mirroring.
           Row {
-            width: parent.width
-            spacing: Style.space(6)
             visible: root.displays.length > 1
+            spacing: Style.space(16)
 
             Repeater {
               model: root.displays
 
-              Button {
+              Item {
+                id: radio
                 required property var modelData
-                width: (parent.width - Style.space(6) * (root.displays.length - 1)) / Math.max(1, root.displays.length)
-                text: modelData
-                selected: root.mirrorDisplay === modelData
-                fontSize: Style.font.caption
-                bordered: true
-                foreground: root.themeForeground
-                onClicked: root.setMirrorDisplay(modelData)
+                readonly property bool on: root.isMirroring && root.mirrorDisplay === modelData
+                implicitWidth: radioRow.implicitWidth
+                implicitHeight: radioRow.implicitHeight
+                width: implicitWidth
+                height: implicitHeight
+
+                Row {
+                  id: radioRow
+                  spacing: Style.space(6)
+
+                  Rectangle {
+                    width: Style.space(14)
+                    height: width
+                    radius: width / 2
+                    color: "transparent"
+                    border.width: 1
+                    border.color: radio.on ? Color.accent : root.themeForeground
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Rectangle {
+                      anchors.centerIn: parent
+                      width: parent.width - Style.space(6)
+                      height: width
+                      radius: width / 2
+                      color: Color.accent
+                      visible: radio.on
+                    }
+                  }
+
+                  Text {
+                    text: radio.modelData
+                    color: radio.on ? Color.accent : root.themeForeground
+                    font.pixelSize: Style.font.caption
+                    font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                    font.bold: radio.on
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.setMirrorDisplay(radio.modelData)
+                }
               }
             }
           }
