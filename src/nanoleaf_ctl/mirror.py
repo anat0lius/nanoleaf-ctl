@@ -28,6 +28,8 @@ from .state import (
 EXT_CONTROL_PORT = 60222
 DEFAULT_FPS = 8
 DEFAULT_TRANS_TIME = 4
+SETUP_ATTEMPTS = 30
+SETUP_RETRY_INTERVAL = 2
 
 
 def grim_available() -> bool:
@@ -153,20 +155,33 @@ def run_mirror_loop(display_name=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS
         sys.stderr.write("Nanoleaf IP not configured\n")
         return
 
-    mon = get_target_monitor(display_name)
-    if not mon:
-        sys.stderr.write("No displays detected (is Hyprland running?)\n")
-        return
-    display = mon["name"]
-    w, h = mon["width"], mon["height"]
-
-    try:
-        targets = compute_screen_panel_targets(w, h)
-    except Exception as e:
-        sys.stderr.write(f"Failed to compute panel targets: {e}\n")
-        return
-    if not targets:
-        sys.stderr.write("No panel layout data available\n")
+    # At login the network, Hyprland or the device may not be ready yet: retry setup for a while.
+    setup_error = None
+    for attempt in range(SETUP_ATTEMPTS):
+        if attempt:
+            time.sleep(SETUP_RETRY_INTERVAL)
+        mon = get_target_monitor(display_name)
+        if not mon:
+            setup_error = "No displays detected (is Hyprland running?)"
+            continue
+        display = mon["name"]
+        w, h = mon["width"], mon["height"]
+        try:
+            targets = compute_screen_panel_targets(w, h)
+            if not targets:
+                setup_error = "No panel layout data available"
+                continue
+            api_request("PUT", "state", {"on": {"value": True}}, config=cfg)  # session-end leaves it off
+            api_request("PUT", "effects", {
+                "write": {"command": "display", "animType": "extControl", "extControlVersion": "v2"}
+            }, config=cfg)
+        except Exception as e:
+            setup_error = f"Failed to set up mirroring: {e}"
+            continue
+        setup_error = None
+        break
+    if setup_error:
+        sys.stderr.write(f"{setup_error}\n")
         return
 
     write_json(MIRROR_STATE_PATH, {
@@ -176,15 +191,6 @@ def run_mirror_loop(display_name=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS
         "fps": fps,
         "trans_time": trans_time,
     })
-
-    try:
-        api_request("PUT", "effects", {
-            "write": {"command": "display", "animType": "extControl", "extControlVersion": "v2"}
-        }, config=cfg)
-    except Exception as e:
-        sys.stderr.write(f"Failed to enable extControl: {e}\n")
-        remove(MIRROR_STATE_PATH)
-        return
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     frame_interval = 1.0 / max(1, fps)

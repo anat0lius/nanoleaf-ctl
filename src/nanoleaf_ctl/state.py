@@ -23,6 +23,7 @@ PREVIEW_STATE_PATH = STATE_DIR / "preview.json"
 PREVIEW_PID_PATH = STATE_DIR / "preview.pid"
 INTENT_STATE_PATH = STATE_DIR / "power-intent.json"
 SCENE_TYPES_PATH = STATE_DIR / "scene-types.json"
+WORKER_LOG_PATH = STATE_DIR / "worker.log"
 # Lives in the runtime dir so it disappears at logout/reboot: "restored once per login".
 SESSION_MARKER_PATH = Path(os.environ.get("XDG_RUNTIME_DIR") or "/tmp") / "nanoleaf-ctl-session-started"
 
@@ -62,10 +63,12 @@ def spawn_worker(*args: str) -> None:
     env = dict(os.environ)
     root = str(Path(__file__).resolve().parent.parent)
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [root, env.get("PYTHONPATH")]))
-    subprocess.Popen(
-        [sys.executable, "-m", "nanoleaf_ctl", *args],
-        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
-    )
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(WORKER_LOG_PATH, "a", encoding="utf-8") as log:
+        subprocess.Popen(
+            [sys.executable, "-m", "nanoleaf_ctl", *args],
+            env=env, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True,
+        )
 
 
 def is_pid_alive(pid: int) -> bool:
