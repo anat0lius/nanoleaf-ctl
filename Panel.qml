@@ -684,10 +684,24 @@ Panel {
           spacing: Style.space(8)
           opacity: root.isOn ? 1.0 : 0.5
 
-          PanelSectionHeader {
-            text: "WHITE TEMPERATURE"
-            foreground: root.themeForeground
-            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+          Row {
+            spacing: Style.space(6)
+
+            Text {
+              text: "󰔏"
+              color: root.themeForeground
+              font.pixelSize: Style.font.icon
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              text: "White Temperature"
+              color: root.themeForeground
+              font.pixelSize: Style.font.body
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              anchors.verticalCenter: parent.verticalCenter
+            }
           }
 
           Row {
@@ -911,10 +925,24 @@ Panel {
           width: parent.width
           spacing: Style.space(8)
 
-          PanelSectionHeader {
-            text: "SCENES"
-            foreground: root.themeForeground
-            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+          Row {
+            spacing: Style.space(6)
+
+            Text {
+              text: "󰸉"
+              color: root.themeForeground
+              font.pixelSize: Style.font.icon
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              text: "Scenes"
+              color: root.themeForeground
+              font.pixelSize: Style.font.body
+              font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              anchors.verticalCenter: parent.verticalCenter
+            }
           }
 
           ListView {
