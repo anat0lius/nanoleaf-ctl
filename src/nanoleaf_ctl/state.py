@@ -137,6 +137,16 @@ def save_power_intent(**kwargs) -> None:
         sys.stderr.write(f"Error saving power intent: {e}\n")
 
 
+def remember_previous_mode(entering: str) -> None:
+    """Notes the mode that mirror/theme sync is about to replace, so leaving them can resume it.
+
+    Mirror never counts as "previous": going mirror -> theme -> off resumes what came before mirror.
+    """
+    cur = load_power_intent().get("mode", "scene")
+    if cur not in (entering, "mirror"):
+        save_power_intent(previous_mode=cur)
+
+
 def set_user_power_intent(is_off: bool) -> None:
     """Records whether the user explicitly intended to leave the lights OFF."""
     save_power_intent(user_intent_off=bool(is_off))

@@ -7,6 +7,7 @@ from .state import (
     cancel_preview,
     get_theme_sync_status,
     load_config,
+    load_power_intent,
     read_json,
     save_config,
     save_power_intent,
@@ -104,7 +105,7 @@ def get_status() -> dict:
 def _power(on: bool, cfg=None):
     set_user_power_intent(not on)
     if not on:
-        stop_mirror()
+        stop_mirror(restore_state=False)
         cancel_preview()
     return set_power_state(on, config=cfg)
 
@@ -130,7 +131,7 @@ def set_brightness(level: int, duration: int = 0):
 def _take_over(**intent) -> None:
     """Common prelude for manual controls: record intent, stop mirror/preview/theme lock."""
     save_power_intent(user_intent_off=False, **intent)
-    stop_mirror()
+    stop_mirror(restore_state=False)
     cancel_preview()
     unlock_theme_sync()
 
@@ -148,3 +149,33 @@ def set_ct(kelvin: int):
 def set_color(hue: int, sat: int):
     _take_over(mode="color", hue=hue, sat=sat)
     return api_request("PUT", "state", {"hue": {"value": int(hue)}, "sat": {"value": int(sat)}})
+
+
+def _first_scene() -> str | None:
+    try:
+        effects = api_request("GET", "effects/effectsList") or []
+    except Exception:
+        return None
+    return next((e for e in effects if not e.startswith(("*", "Theme:"))), None)
+
+
+def restore_previous() -> str | None:
+    """Resumes the mode that mirror / theme sync replaced. Returns a short label of what came back."""
+    st = load_power_intent()
+    mode = st.get("previous_mode")
+    if mode == "theme":
+        palette = get_theme_sync_status().get("palette")
+        if palette:
+            from .theme import sync_theme  # theme imports this module
+            sync_theme(get_theme_sync_status().get("theme", ""), palette)
+            return "theme"
+    elif mode == "ct" and st.get("ct"):
+        set_ct(st["ct"])
+        return f"{st['ct']}K"
+    elif mode == "color" and "hue" in st and "sat" in st:
+        set_color(st["hue"], st["sat"])
+        return "color"
+    scene = st.get("scene") or _first_scene()
+    if scene:
+        set_scene(scene)
+    return scene

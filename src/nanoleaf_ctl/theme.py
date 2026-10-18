@@ -7,7 +7,7 @@ import sys
 import time
 
 from .api import api_request, set_power_state
-from .controls import set_ct, set_scene
+from .controls import restore_previous, set_ct, set_scene
 from .mirror import get_mirror_status, start_mirror, stop_mirror
 from .state import (
     PREVIEW_PID_PATH,
@@ -20,6 +20,7 @@ from .state import (
     load_power_intent,
     read_json,
     read_preview_pid,
+    remember_previous_mode,
     save_power_intent,
     save_theme_sync_status,
     spawn_worker,
@@ -75,7 +76,7 @@ def _theme_label(name: str) -> str:
 def apply_theme_palette(name: str, colors: list[str]) -> None:
     """Sends the dynamic palette flow payload to Nanoleaf."""
     palette = [hex_to_hsb(c) for c in normalize_colors(colors)]
-    stop_mirror()
+    stop_mirror(restore_state=False)
     payload = {
         "write": {
             "command": "display",
@@ -96,6 +97,7 @@ def apply_theme_palette(name: str, colors: list[str]) -> None:
 def sync_theme(name: str, colors: list[str]) -> None:
     """Locks theme sync ON for the given palette."""
     colors = normalize_colors(colors)
+    remember_previous_mode("theme")
     save_power_intent(user_intent_off=False, mode="theme")
     cancel_preview()
     apply_theme_palette(name, colors)
@@ -106,27 +108,13 @@ def sync_theme(name: str, colors: list[str]) -> None:
     print(f"Nanoleaf locked to theme '{name}'")
 
 
-def _previous_scene() -> str | None:
-    """Last scene the user picked, else the device's first regular scene."""
-    scene = load_power_intent().get("scene")
-    if scene:
-        return scene
-    try:
-        effects = api_request("GET", "effects/effectsList") or []
-    except Exception:
-        return None
-    return next((e for e in effects if not e.startswith(("*", "Theme:"))), None)
-
-
 def unsync_theme() -> None:
-    """Unlocks theme sync and restores the previous scene."""
+    """Unlocks theme sync and resumes whatever it replaced (scene, white temperature, mirror's predecessor...)."""
     st = get_theme_sync_status()
     st["synced"] = False
     save_theme_sync_status(st)
-    scene = _previous_scene()
-    if scene:
-        set_scene(scene)
-    print(f"Theme sync unlocked{f' (restored {scene})' if scene else ''}")
+    restored = restore_previous()
+    print(f"Theme sync unlocked{f' (restored {restored})' if restored else ''}")
 
 
 def _snapshot_state() -> None:

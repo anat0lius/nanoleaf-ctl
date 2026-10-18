@@ -18,6 +18,7 @@ from .state import (
     is_pid_alive,
     load_config,
     read_json,
+    remember_previous_mode,
     remove,
     save_power_intent,
     spawn_worker,
@@ -245,6 +246,7 @@ def start_mirror(display=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME) -
     if not mon:
         raise RuntimeError("No displays detected (is Hyprland running?)")
     target_display = mon["name"]
+    remember_previous_mode("mirror")
     save_power_intent(user_intent_off=False, mode="mirror", mirror_display=target_display)
     cancel_preview()
     unlock_theme_sync()
@@ -287,7 +289,8 @@ def stop_mirror(restore_state: bool = True) -> bool:
     remove(MIRROR_STATE_PATH)
     if restore_state:
         try:
-            set_static_effect()
+            from .controls import restore_previous  # controls imports this module
+            restore_previous()
         except Exception:
             pass
 
