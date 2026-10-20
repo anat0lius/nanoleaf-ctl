@@ -15,6 +15,15 @@ from .state import CONFIG_PATH, load_config, save_config
 
 DEFAULT_PORT = 16021
 REQUEST_TIMEOUT = 4
+MAX_RESPONSE_BYTES = 1 << 20  # real responses are tens of KB; the timeout alone doesn't bound size
+
+
+def read_limited(resp, limit: int = MAX_RESPONSE_BYTES) -> str:
+    """Reads and decodes a response body, refusing anything larger than ``limit`` bytes."""
+    raw = resp.read(limit + 1)
+    if len(raw) > limit:
+        raise RuntimeError(f"Response from the device is larger than {limit} bytes")
+    return raw.decode("utf-8")
 
 
 def api_request(method: str, endpoint: str, data=None, config=None):
@@ -41,7 +50,7 @@ def api_request(method: str, endpoint: str, data=None, config=None):
 
     try:
         with urllib.request.urlopen(req, data=body, timeout=REQUEST_TIMEOUT) as resp:
-            content = resp.read().decode("utf-8")
+            content = read_limited(resp)
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"HTTP {e.code}: {e.reason}") from e
     except Exception as e:
@@ -131,7 +140,7 @@ def pair(ip=None, port=DEFAULT_PORT, timeout=45) -> bool:
         try:
             req = urllib.request.Request(f"http://{ip}:{port}/api/v1/new", method="POST")
             with urllib.request.urlopen(req, timeout=3) as resp:
-                token = json.loads(resp.read().decode("utf-8")).get("auth_token")
+                token = json.loads(read_limited(resp)).get("auth_token")
             if token:
                 cfg.update(ip=ip, port=port, token=token)
                 save_config(cfg)
