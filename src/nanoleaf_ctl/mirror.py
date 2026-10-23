@@ -13,7 +13,9 @@ import time
 
 from .api import api_request, set_static_effect
 from .state import (
+    MIRROR_LOCK_PATH,
     MIRROR_STATE_PATH,
+    acquire_lock,
     cancel_preview,
     is_pid_alive,
     is_worker_pid,
@@ -32,6 +34,7 @@ DEFAULT_FPS = 8
 DEFAULT_TRANS_TIME = 4
 SETUP_ATTEMPTS = 30
 SETUP_RETRY_INTERVAL = 2
+LOCK_WAIT_SECONDS = 10  # a worker being replaced still has to reset the effect on its way out
 
 
 def grim_available() -> bool:
@@ -150,7 +153,19 @@ def get_mirror_status() -> dict:
 # --- Worker (runs in the detached `mirror-run` process) ----------------------------
 
 def run_mirror_loop(display_name=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME) -> None:
-    """Continuous frame capture and UDP streaming loop."""
+    """Continuous frame capture and UDP streaming loop. Only one runs at a time."""
+    # Taken before the setup retries below, which can last a minute and write no state file yet.
+    lock_fd = acquire_lock(MIRROR_LOCK_PATH, wait=LOCK_WAIT_SECONDS)
+    if lock_fd is None:
+        sys.stderr.write("Another mirror worker is already running\n")
+        return
+    try:
+        _run_mirror_loop(display_name, fps, trans_time)
+    finally:
+        os.close(lock_fd)
+
+
+def _run_mirror_loop(display_name, fps, trans_time) -> None:
     cfg = load_config()
     ip = cfg.get("ip")
     if not ip:

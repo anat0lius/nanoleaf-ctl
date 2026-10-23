@@ -23,3 +23,22 @@ def test_build_packet_layout():
     pixels = bytes([1, 2, 3]) * (4 * 4)
     targets = [{"panelId": 7, "cx": 2, "cy": 2, "radius": 1}]
     assert build_packet(targets, pixels, 4, 4, 4) == struct.pack(">HHBBBBH", 1, 7, 1, 2, 3, 0, 4)
+
+
+def test_second_mirror_worker_refuses_to_run(monkeypatch, tmp_path, capsys):
+    from nanoleaf_ctl import mirror
+
+    monkeypatch.setattr(mirror, "MIRROR_LOCK_PATH", tmp_path / "mirror.lock")
+    monkeypatch.setattr(mirror, "LOCK_WAIT_SECONDS", 0)
+    ran = []
+    monkeypatch.setattr(mirror, "_run_mirror_loop", lambda *a: ran.append(a))
+
+    held = mirror.acquire_lock(mirror.MIRROR_LOCK_PATH)
+    mirror.run_mirror_loop("DP-1", 8, 4)
+    assert ran == []
+    assert "already running" in capsys.readouterr().err
+
+    import os
+    os.close(held)  # releasing the lock lets the next worker start
+    mirror.run_mirror_loop("DP-1", 8, 4)
+    assert len(ran) == 1

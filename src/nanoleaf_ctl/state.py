@@ -1,5 +1,6 @@
 """Paths, JSON helpers, device config and persisted state (intent, theme lock, preview)."""
 
+import fcntl
 import json
 import os
 import signal
@@ -18,6 +19,7 @@ STATE_DIR = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state
 
 CONFIG_PATH = CONFIG_DIR / "config.json"
 MIRROR_STATE_PATH = STATE_DIR / "mirror.json"
+MIRROR_LOCK_PATH = STATE_DIR / "mirror.lock"
 THEME_STATE_PATH = STATE_DIR / "theme.json"
 PREVIEW_STATE_PATH = STATE_DIR / "preview.json"
 PREVIEW_PID_PATH = STATE_DIR / "preview.pid"
@@ -45,6 +47,26 @@ def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+
+
+def acquire_lock(path: Path, wait: float = 0.0) -> int | None:
+    """Takes an exclusive lock on ``path``, retrying for up to ``wait`` seconds.
+
+    Returns the open file descriptor, which holds the lock until it is closed (the kernel also
+    drops it if the process dies, so a crash can never leave a stale lock). None if still held.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except OSError:
+            if time.monotonic() >= deadline:
+                os.close(fd)
+                return None
+            time.sleep(0.1)
 
 
 def remove(path: Path) -> None:
