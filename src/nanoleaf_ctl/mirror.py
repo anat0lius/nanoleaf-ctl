@@ -16,6 +16,7 @@ from .state import (
     MIRROR_STATE_PATH,
     cancel_preview,
     is_pid_alive,
+    is_worker_pid,
     load_config,
     read_json,
     remember_previous_mode,
@@ -140,7 +141,7 @@ def get_mirror_status() -> dict:
     data = read_json(MIRROR_STATE_PATH)
     if data:
         pid = data.get("pid")
-        if pid and is_pid_alive(pid):
+        if pid and is_worker_pid(pid):
             return data
         remove(MIRROR_STATE_PATH)
     return {"active": False, "display": None, "pid": None}

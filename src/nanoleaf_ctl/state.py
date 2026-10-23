@@ -79,6 +79,19 @@ def is_pid_alive(pid: int) -> bool:
         return False
 
 
+def is_worker_pid(pid: int) -> bool:
+    """True if ``pid`` is alive and is one of our `python -m nanoleaf_ctl` processes.
+
+    Pid files outlive reboots and crashes, so a bare liveness check could match a recycled pid.
+    """
+    if not is_pid_alive(pid):
+        return False
+    try:
+        return b"nanoleaf_ctl" in Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return False
+
+
 # ============================================================================
 # config
 # ============================================================================
@@ -188,7 +201,7 @@ def read_preview_pid() -> int | None:
 
 def kill_preview_worker(*, skip_self: bool = True) -> None:
     pid = read_preview_pid()
-    if pid and not (skip_self and pid == os.getpid()) and is_pid_alive(pid):
+    if pid and not (skip_self and pid == os.getpid()) and is_worker_pid(pid):
         try:
             os.kill(pid, signal.SIGTERM)
         except OSError:
