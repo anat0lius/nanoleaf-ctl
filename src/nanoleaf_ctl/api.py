@@ -64,7 +64,7 @@ def api_request(method: str, endpoint: str, data=None, config=None):
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"HTTP {e.code}: {e.reason}") from e
     except Exception as e:
-        raise RuntimeError(f"Request failed ({url}): {e}") from e
+        raise RuntimeError(f"Request failed: {e}") from e
 
     if not content:
         return None
