@@ -175,10 +175,16 @@ def save_power_intent(**kwargs) -> None:
 def remember_previous_mode(entering: str) -> None:
     """Notes the mode that mirror/theme sync is about to replace, so leaving them can resume it.
 
-    Mirror never counts as "previous": going mirror -> theme -> off resumes what came before mirror.
+    Theme sync replacing mirror also keeps what mirror itself replaced (``before_mirror``), so
+    resuming mirror doesn't turn it into the "previous" mode of whatever comes next.
     """
-    cur = load_power_intent().get("mode", "scene")
-    if cur not in (entering, "mirror"):
+    st = load_power_intent()
+    cur = st.get("mode", "scene")
+    if cur == entering:
+        return
+    if cur == "mirror":
+        save_power_intent(previous_mode="mirror", before_mirror=st.get("previous_mode"))
+    else:
         save_power_intent(previous_mode=cur)
 
 

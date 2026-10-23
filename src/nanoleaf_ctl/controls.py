@@ -1,7 +1,7 @@
 """Direct device controls: status, power, brightness, scenes, color."""
 
 from .api import api_request, set_power_state
-from .mirror import get_hyprland_monitors, get_mirror_status, grim_available, stop_mirror
+from .mirror import get_hyprland_monitors, get_mirror_status, grim_available, start_mirror, stop_mirror
 from .state import (
     SCENE_TYPES_PATH,
     cancel_preview,
@@ -169,6 +169,10 @@ def restore_previous() -> str | None:
             from .theme import sync_theme  # theme imports this module
             sync_theme(get_theme_sync_status().get("theme", ""), palette)
             return "theme"
+    elif mode == "mirror":
+        start_mirror(display=st.get("mirror_display"))
+        save_power_intent(previous_mode=st.get("before_mirror"))  # stopping it resumes what it replaced
+        return "mirror"
     elif mode == "ct" and st.get("ct"):
         set_ct(st["ct"])
         return f"{st['ct']}K"
