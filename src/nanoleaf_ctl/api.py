@@ -18,6 +18,16 @@ REQUEST_TIMEOUT = 4
 MAX_RESPONSE_BYTES = 1 << 20  # real responses are tens of KB; the timeout alone doesn't bound size
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """The device API never redirects; the stock handler drains redirect bodies with an unbounded read."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_opener = urllib.request.build_opener(_NoRedirect)
+
+
 def read_limited(resp, limit: int = MAX_RESPONSE_BYTES) -> str:
     """Reads and decodes a response body, refusing anything larger than ``limit`` bytes."""
     raw = resp.read(limit + 1)
@@ -49,7 +59,7 @@ def api_request(method: str, endpoint: str, data=None, config=None):
     body = json.dumps(data).encode("utf-8") if data is not None else None
 
     try:
-        with urllib.request.urlopen(req, data=body, timeout=REQUEST_TIMEOUT) as resp:
+        with _opener.open(req, data=body, timeout=REQUEST_TIMEOUT) as resp:
             content = read_limited(resp)
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"HTTP {e.code}: {e.reason}") from e
@@ -139,7 +149,7 @@ def pair(ip=None, port=DEFAULT_PORT, timeout=45) -> bool:
     while time.time() - start < timeout:
         try:
             req = urllib.request.Request(f"http://{ip}:{port}/api/v1/new", method="POST")
-            with urllib.request.urlopen(req, timeout=3) as resp:
+            with _opener.open(req, timeout=3) as resp:
                 token = json.loads(read_limited(resp)).get("auth_token")
             if token:
                 cfg.update(ip=ip, port=port, token=token)
