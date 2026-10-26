@@ -40,3 +40,35 @@ def test_existing_world_readable_config_is_tightened_on_load_and_save(monkeypatc
     cfg_path.chmod(0o644)
     state.save_config({"token": "t2"})
     assert _mode(cfg_path) == 0o600
+
+
+def test_spawn_worker_tightens_existing_state_dir_and_log(monkeypatch, tmp_path):
+    state_dir = tmp_path / "nanoleaf"
+    state_dir.mkdir()
+    state_dir.chmod(0o755)
+    log = state_dir / "worker.log"
+    log.write_text("Request failed (http://1.2.3.4:16021/api/v1/secret/state): timed out\n")
+    log.chmod(0o644)
+    monkeypatch.setattr(state, "STATE_DIR", state_dir)
+    monkeypatch.setattr(state, "WORKER_LOG_PATH", log)
+    monkeypatch.setattr(state.subprocess, "Popen", lambda *a, **k: None)
+
+    state.spawn_worker("mirror-run")
+
+    assert _mode(state_dir) == 0o700
+    assert _mode(log) == 0o600
+
+
+def test_new_worker_log_is_private(monkeypatch, tmp_path):
+    state_dir = tmp_path / "nanoleaf"
+    monkeypatch.setattr(state, "STATE_DIR", state_dir)
+    monkeypatch.setattr(state, "WORKER_LOG_PATH", state_dir / "worker.log")
+    monkeypatch.setattr(state.subprocess, "Popen", lambda *a, **k: None)
+    old = os.umask(0o022)
+    try:
+        state.spawn_worker("mirror-run")
+    finally:
+        os.umask(old)
+
+    assert _mode(state_dir) == 0o700
+    assert _mode(state_dir / "worker.log") == 0o600

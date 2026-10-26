@@ -43,8 +43,16 @@ def read_json(path: Path, default: Any = None) -> Any:
         return default
 
 
+def ensure_state_dir() -> None:
+    """Creates the state dir private to the user (0700), tightening one made by an older version."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    _restrict(STATE_DIR, 0o700)
+
+
 def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.parent == STATE_DIR:
+        _restrict(STATE_DIR, 0o700)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
@@ -85,8 +93,12 @@ def spawn_worker(*args: str) -> None:
     env = dict(os.environ)
     root = str(Path(__file__).resolve().parent.parent)
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [root, env.get("PYTHONPATH")]))
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    with open(WORKER_LOG_PATH, "a", encoding="utf-8") as log:
+    ensure_state_dir()
+    # Older versions logged request errors containing the device token, so a log left over from
+    # one of them is tightened too, not just new ones.
+    fd = os.open(WORKER_LOG_PATH, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    _restrict(WORKER_LOG_PATH, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as log:
         subprocess.Popen(
             [sys.executable, "-m", "nanoleaf_ctl", *args],
             env=env, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True,
