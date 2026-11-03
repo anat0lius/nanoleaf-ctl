@@ -24,6 +24,7 @@ Panel {
   Component.onCompleted: {
     root.refresh()
     root.refreshSession()
+    root.runScript(["auto-mirror-run", "--ensure"])
   }
 
   property bool configured: true
@@ -50,6 +51,11 @@ Panel {
   property string model: ""
   property bool isMirroring: false
   property string mirrorDisplay: ""
+  property bool autoMirror: false
+  property bool mirrorIsAuto: false
+  // The mode just picked: status replies don't override it until they confirm it, as starting takes a moment.
+  property string pendingMirrorMode: ""
+  readonly property string mirrorMode: (root.isMirroring && !root.mirrorIsAuto) ? "on" : (root.autoMirror ? "auto" : "off")
   property var displays: []
   property int currentCt: 0
   property string colorMode: ""
@@ -129,22 +135,40 @@ Panel {
     runScript(["brightness", String(root.brightness)])
   }
 
-  function toggleMirror() {
-    root.isMirroring = !root.isMirroring
-    if (root.isMirroring) {
+  function setMirrorMode(mode) {
+    if (mode === root.mirrorMode) return
+    root.expectMirrorMode(mode)
+    if (mode === "on") {
+      root.isMirroring = true
+      root.mirrorIsAuto = false
+      root.autoMirror = false
       root.isOn = true
       root.isThemeSynced = false
       runScript(root.mirrorDisplay ? ["mirror", "start", "--display", root.mirrorDisplay] : ["mirror", "start"])
+    } else if (mode === "auto") {
+      root.isMirroring = false
+      root.autoMirror = true
+      runScript(["mirror", "auto"])
     } else {
       runScript(["mirror", "stop"])
+      root.isMirroring = false
+      root.autoMirror = false
     }
     statusDelayTimer.restart()
   }
 
+  function expectMirrorMode(mode) {
+    root.pendingMirrorMode = mode
+    mirrorPendingTimer.restart()
+  }
+
   function setMirrorDisplay(disp) {
     if (root.mirrorDisplay === disp && root.isMirroring) return
+    root.expectMirrorMode("on")
     root.mirrorDisplay = disp
     root.isMirroring = true
+    root.mirrorIsAuto = false
+    root.autoMirror = false
     root.isOn = true
     root.isThemeSynced = false
     runScript(["mirror", "start", "--display", disp])
@@ -251,6 +275,16 @@ Panel {
   }
 
   Timer {
+    id: mirrorPendingTimer
+    interval: 5000
+    repeat: false
+    onTriggered: {
+      root.pendingMirrorMode = ""
+      root.refresh()
+    }
+  }
+
+  Timer {
     id: brightnessDebounce
     interval: 200
     repeat: false
@@ -286,11 +320,25 @@ Panel {
           if (root.colorMode === "ct") {
             root.currentScene = ""
           }
-          root.isMirroring = !!(data.mirror && data.mirror.active)
           root.displays = data.displays || []
           root.canMirror = !!(data.capabilities && data.capabilities.mirror)
-          if (data.mirror && data.mirror.display) root.mirrorDisplay = data.mirror.display
-          else if (!root.mirrorDisplay || root.displays.indexOf(root.mirrorDisplay) < 0) root.mirrorDisplay = root.displays[0] || ""
+          var mirror = data.mirror || {}
+          var statusMode = (mirror.active && !mirror.auto) ? "on" : (data.autoMirror ? "auto" : "off")
+          var confirmed = statusMode === root.pendingMirrorMode
+            && (statusMode !== "on" || mirror.display === root.mirrorDisplay)
+          if (confirmed) {
+            root.pendingMirrorMode = ""
+            mirrorPendingTimer.stop()
+          }
+          if (root.pendingMirrorMode) {
+            statusDelayTimer.restart()
+          } else {
+            root.isMirroring = !!mirror.active
+            root.autoMirror = !!data.autoMirror
+            root.mirrorIsAuto = !!mirror.auto
+            if (mirror.display) root.mirrorDisplay = mirror.display
+            else if (!root.mirrorDisplay || root.displays.indexOf(root.mirrorDisplay) < 0) root.mirrorDisplay = root.displays[0] || ""
+          }
           if (data.themeSync) {
             root.isThemeSynced = !!data.themeSync.synced
             root.themeName = data.themeSync.theme || ""
@@ -745,17 +793,9 @@ Panel {
           Row {
             width: parent.width
 
-            HoverHandler { id: mirrorHover }
-
-            PanelToolTip {
-              visible: mirrorHover.hovered
-              text: root.isMirroring ? ("Active on " + root.mirrorDisplay) : "Sync lighting with display"
-              fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-            }
-
             Column {
               anchors.verticalCenter: parent.verticalCenter
-              width: parent.width - mirrorSwitch.width - Style.space(12)
+              width: parent.width - mirrorModes.width
               spacing: Style.space(2)
 
               Row {
@@ -780,18 +820,28 @@ Panel {
               }
             }
 
-            ToggleSwitch {
-              id: mirrorSwitch
+            ButtonGroup {
+              id: mirrorModes
               anchors.verticalCenter: parent.verticalCenter
-              checked: root.isMirroring
+              spacing: Style.space(4)
+              focusable: false
+              options: [
+                { value: "off", label: "Off", tooltip: "No mirroring" },
+                { value: "auto", label: "Auto", tooltip: "Mirror while a game or video is fullscreen, then go back" },
+                { value: "on", label: "On", tooltip: "Always sync lighting with the display" }
+              ]
+              value: root.mirrorMode
               foreground: root.themeForeground
-              onToggled: root.toggleMirror()
+              fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+              fontSize: Style.font.caption
+              onChanged: function(v) { root.setMirrorMode(v) }
             }
           }
 
-          // Radio list: the dot is only filled for the display that is actually mirroring.
+          // Radio list, only for On: in Auto the mirror follows the fullscreen window.
           Row {
-            visible: root.displays.length > 1
+            visible: root.displays.length > 1 && root.mirrorMode === "on"
+            anchors.right: parent.right
             spacing: Style.space(16)
 
             Repeater {

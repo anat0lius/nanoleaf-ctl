@@ -35,8 +35,9 @@ def test_status_json_contract(monkeypatch):
         "configured", "name", "rawName", "model", "serialNo", "firmware",
         "on", "brightness", "hue", "sat", "ct", "colorMode",
         "currentEffect", "effectsList", "musicScenes",
-        "panelLayout", "mirror", "displays", "capabilities", "themeSync",
+        "panelLayout", "mirror", "displays", "capabilities", "themeSync", "autoMirror",
     }  # fmt: skip
+    assert st["autoMirror"] is False
     assert st["on"] is True
     assert st["brightness"] == 60
     assert st["currentEffect"] == "Golden Hour"

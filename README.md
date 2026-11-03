@@ -7,7 +7,7 @@ in a panel:
 <img src="preview.png" alt="Nanoleaf bar widget panel" width="280">
 
 - power, brightness, white temperature and scenes
-- screen mirroring on any detected display
+- screen mirroring on any detected display, on demand or automatically while a game or video is fullscreen
 - palette sync: lock the lights to a color palette (for example your desktop theme), or preview a new one
   briefly and then restore
 - restore the last state at login
@@ -44,6 +44,7 @@ enable specific features:
 | --- | --- |
 | `avahi-daemon` | Finding the device when pairing (not needed if you give its IP) |
 | `grim` and Hyprland | Screen mirroring only; everything else works without them |
+| `pw-dump` (PipeWire) | Auto mirror only, to tell a game or video from any other fullscreen window |
 
 It uses Nanoleaf's local OpenAPI, so it should work with the panel products that expose it (Light Panels,
 Canvas, Shapes, Elements, Lines, Blocks). So far it has been tested only with Nanoleaf Blocks, on Omarchy.
@@ -76,7 +77,9 @@ nanoleaf-ctl ct 2700                # white temperature in Kelvin
 nanoleaf-ctl mirror start           # mirror the focused display
 nanoleaf-ctl mirror start --display DP-2
 nanoleaf-ctl mirror displays        # detected displays
-nanoleaf-ctl mirror stop
+nanoleaf-ctl mirror auto            # mirror while a fullscreen game or video plays, then resume
+nanoleaf-ctl mirror stop            # off: stops the mirror and auto
+nanoleaf-ctl mirror status          # current mode: on, auto or off
 nanoleaf-ctl theme-sync --name sunset --colors "#f38d70" "#85dacc" "#fd6883"
 nanoleaf-ctl theme-sync --off       # unlock and restore the previous scene
 nanoleaf-ctl theme-change --name dawn --colors "#f9cc6c" "#a8a9eb"
@@ -87,6 +90,15 @@ nanoleaf-ctl session-service enable # on at login, off at logout (systemd user u
 
 Every command that takes over the lights (scene, ct, mirror, theme sync) cancels the others, so only one
 mode is active at a time.
+
+### Auto mirror
+
+With `mirror auto` (or Screen Mirror set to Auto in the widget), a fullscreen window that is playing audio
+starts the mirror on its display, and the lights go back to what they were doing when it leaves fullscreen.
+Pausing doesn't stop it. It replaces an always-on mirror, `mirror start` replaces it in turn, and `mirror stop`
+turns either one off. Silent windows don't count, so a muted game or video needs `mirror start`. A browser counts as one window, so
+music in a background tab makes any fullscreen page count. It stays out of your way: lights you turned off
+stay off, and choosing a scene, a white temperature or a palette mid-game sticks. The watcher needs Hyprland, and starts again with the widget or `session-start`.
 
 ### Palette sync
 
@@ -107,6 +119,7 @@ user unit is written only when you turn on "Auto on/off" (or run `session-servic
 | `ip` | Device address. If you set it before pairing (`{"ip": "192.168.1.50"}`), `pair` uses it instead of discovery |
 | `friendly_name` | Name shown instead of the device's own name (set it with `nanoleaf-ctl rename`) |
 | `mirror_display` | Preferred display for mirroring (default: the focused display) |
+| `auto_mirror` | Auto mirror is on (set it with `nanoleaf-ctl mirror auto`, clear it with `mirror stop`) |
 
 ## Status JSON
 
@@ -124,7 +137,8 @@ user unit is written only when you turn on "Auto on/off" (or run `session-servic
 | `currentEffect` | string | Active scene (shown as `Theme: …` while palette sync is locked) |
 | `effectsList` | string[] | All scenes |
 | `musicScenes` | string[] | Scenes that react to music |
-| `mirror` | object | `{active, display, pid, fps, trans_time}` |
+| `mirror` | object | `{active, display, pid, fps, trans_time, auto}` (`auto`: started by auto mirror) |
+| `autoMirror` | bool | Auto mirror is enabled |
 | `displays` | string[] | Detected display names |
 | `capabilities` | object | `{mirror}`: true when `grim` and a display are available |
 | `themeSync` | object | `{synced, theme, mode, palette}` |

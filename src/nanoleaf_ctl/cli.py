@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 
-from . import api, controls, mirror, service, theme
+from . import api, auto_mirror, controls, mirror, service, theme
 from .api import DEFAULT_PORT
 from .state import get_theme_sync_status, get_user_power_intent, set_user_power_intent
 
@@ -53,9 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fps", type=int, default=mirror.DEFAULT_FPS, help="Capture FPS (default: 8)")
     p.add_argument("--trans-time", type=int, default=mirror.DEFAULT_TRANS_TIME,
                    help="Smooth transition time in deciseconds (default: 4 = 400ms)")
-    m_sub.add_parser("stop", help="Stop screen mirror")
-    p = m_sub.add_parser("toggle", help="Toggle screen mirror")
-    p.add_argument("--display", help="Target display (see `mirror displays`; default: configured or focused)")
+    m_sub.add_parser("auto", help="Mirror while a fullscreen game or video plays audio, then resume")
+    m_sub.add_parser("stop", help="Stop screen mirror, including auto")
     _json_flag(m_sub.add_parser("status", help="Check screen mirror status"))
     _json_flag(m_sub.add_parser("displays", help="List available displays"))
 
@@ -63,6 +62,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--display")
     p.add_argument("--fps", type=int, default=mirror.DEFAULT_FPS)
     p.add_argument("--trans-time", type=int, default=mirror.DEFAULT_TRANS_TIME)
+    p.add_argument("--auto", action="store_true")
+
+    p = sub.add_parser("auto-mirror-run", help=argparse.SUPPRESS)
+    p.add_argument("--ensure", action="store_true", help="Start the detached watcher if auto is on, then return")
 
     p = sub.add_parser("theme-sync", help="Lock the lights to a color palette (e.g. from your desktop theme)")
     p.add_argument("--name", default="", help="Label for the palette (e.g. the theme name)")
@@ -175,12 +178,18 @@ def _cmd_ct(a):
 
 def _mirror_status(a):
     st = mirror.get_mirror_status()
+    auto = auto_mirror.get_status()
+    mode = "on" if st.get("active") and not st.get("auto") else "auto" if auto["enabled"] else "off"
     if a.json:
-        print(json.dumps(st, indent=2))
-    elif st.get("active"):
-        print(f"Screen mirror ACTIVE (PID: {st['pid']}, Display: {st['display']}, FPS: {st['fps']})")
+        print(json.dumps({**st, "mode": mode, "watcher_running": auto["running"]}, indent=2))
+        return
+    label = "AUTO" if mode == "auto" else "ON" if mode == "on" else "OFF"
+    if st.get("active"):
+        print(f"Screen mirror {label}, ACTIVE (PID: {st['pid']}, Display: {st['display']}, FPS: {st['fps']})")
+    elif mode == "auto" and not auto["running"]:
+        print("Screen mirror AUTO, watcher not running")
     else:
-        print("Screen mirror INACTIVE")
+        print(f"Screen mirror {label}, INACTIVE")
 
 
 def _mirror_displays(a):
@@ -193,11 +202,26 @@ def _mirror_displays(a):
         print(f"{m.get('name')}: {m.get('width')}x{m.get('height')} @ {m.get('refreshRate', 60):.0f}Hz{foc}")
 
 
+def _mirror_start(a):
+    mirror.start_mirror(a.display, a.fps, a.trans_time)
+    auto_mirror.disable()  # an always-on mirror replaces auto; it was just claimed, so this leaves it running
+
+
+def _mirror_auto(a):
+    auto_mirror.enable()
+    print("Screen mirror AUTO")
+
+
+def _mirror_stop(a):
+    auto_mirror.disable()
+    mirror.stop_mirror()
+
+
 def _cmd_mirror(a):
     handlers = {
-        "start": lambda: mirror.start_mirror(a.display, a.fps, a.trans_time),
-        "stop": mirror.stop_mirror,
-        "toggle": lambda: mirror.toggle_mirror(a.display),
+        "start": lambda: _mirror_start(a),
+        "auto": lambda: _mirror_auto(a),
+        "stop": lambda: _mirror_stop(a),
         "status": lambda: _mirror_status(a),
         "displays": lambda: _mirror_displays(a),
     }
@@ -209,7 +233,14 @@ def _cmd_mirror(a):
 
 
 def _cmd_mirror_run(a):
-    mirror.run_mirror_loop(a.display, a.fps, a.trans_time)
+    mirror.run_mirror_loop(a.display, a.fps, a.trans_time, a.auto)
+
+
+def _cmd_auto_mirror_run(a):
+    if a.ensure:
+        auto_mirror.ensure_running()
+    else:
+        auto_mirror.run_watcher()
 
 
 def _cmd_theme_sync(a):
@@ -239,6 +270,7 @@ def _cmd_theme_status(a):
 
 def _cmd_session_start(a):
     theme.on_session_start(a.retries, a.interval, a.once)
+    auto_mirror.ensure_running()
 
 
 def _cmd_session_end(a):
@@ -281,6 +313,7 @@ COMMANDS = {
     "ct": _cmd_ct,
     "mirror": _cmd_mirror,
     "mirror-run": _cmd_mirror_run,
+    "auto-mirror-run": _cmd_auto_mirror_run,
     "theme-sync": _cmd_theme_sync,
     "theme-change": _cmd_theme_change,
     "theme-preview-restore": _cmd_theme_restore,

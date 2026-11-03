@@ -17,7 +17,6 @@ from .state import (
     MIRROR_STATE_PATH,
     acquire_lock,
     cancel_preview,
-    is_pid_alive,
     is_worker_pid,
     load_config,
     read_json,
@@ -152,7 +151,7 @@ def get_mirror_status() -> dict:
 
 # --- Worker (runs in the detached `mirror-run` process) ----------------------------
 
-def run_mirror_loop(display_name=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME) -> None:
+def run_mirror_loop(display_name=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME, auto=False) -> None:
     """Continuous frame capture and UDP streaming loop. Only one runs at a time."""
     # Taken before the setup retries below, which can last a minute and write no state file yet.
     lock_fd = acquire_lock(MIRROR_LOCK_PATH, wait=LOCK_WAIT_SECONDS)
@@ -160,12 +159,12 @@ def run_mirror_loop(display_name=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS
         sys.stderr.write("Another mirror worker is already running\n")
         return
     try:
-        _run_mirror_loop(display_name, fps, trans_time)
+        _run_mirror_loop(display_name, fps, trans_time, auto)
     finally:
         os.close(lock_fd)
 
 
-def _run_mirror_loop(display_name, fps, trans_time) -> None:
+def _run_mirror_loop(display_name, fps, trans_time, auto=False) -> None:
     cfg = load_config()
     ip = cfg.get("ip")
     if not ip:
@@ -207,6 +206,7 @@ def _run_mirror_loop(display_name, fps, trans_time) -> None:
         "display": display,
         "fps": fps,
         "trans_time": trans_time,
+        "auto": auto,
     })
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -255,25 +255,30 @@ def _run_mirror_loop(display_name, fps, trans_time) -> None:
 
 # --- Control (called from the CLI process) -----------------------------------------
 
-def start_mirror(display=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME) -> bool:
+def start_mirror(display=None, fps=DEFAULT_FPS, trans_time=DEFAULT_TRANS_TIME, auto=False) -> bool:
+    """Starts mirroring. An ``auto`` mirror is temporary: the saved mode stays what it will resume."""
     if not grim_available():
         raise RuntimeError("Screen mirroring needs `grim` (and Hyprland's `hyprctl`) to be installed")
     mon = get_target_monitor(display)
     if not mon:
         raise RuntimeError("No displays detected (is Hyprland running?)")
     target_display = mon["name"]
-    remember_previous_mode("mirror")
-    save_power_intent(user_intent_off=False, mode="mirror", mirror_display=target_display)
+    if not auto:
+        remember_previous_mode("mirror")
+        save_power_intent(user_intent_off=False, mode="mirror", mirror_display=target_display)
+        unlock_theme_sync()
     cancel_preview()
-    unlock_theme_sync()
     st = get_mirror_status()
     if st.get("active"):
         if st.get("display") == target_display:
+            if st.get("auto") and not auto:  # the user asked for it now: leaving fullscreen won't stop it
+                write_json(MIRROR_STATE_PATH, {**st, "auto": False})
             print(f"Screen mirror is already running on {target_display} (PID: {st['pid']})")
             return True
         stop_mirror(restore_state=False)
 
-    spawn_worker("mirror-run", "--fps", str(fps), "--trans-time", str(trans_time), "--display", target_display)
+    spawn_worker("mirror-run", "--fps", str(fps), "--trans-time", str(trans_time), "--display", target_display,
+                 *(["--auto"] if auto else []))
 
     for _ in range(15):
         time.sleep(0.1)
@@ -297,7 +302,7 @@ def stop_mirror(restore_state: bool = True) -> bool:
             os.kill(pid, signal.SIGTERM)
             for _ in range(20):
                 time.sleep(0.05)
-                if not is_pid_alive(pid):
+                if not is_worker_pid(pid):  # not is_pid_alive: under the auto mirror watcher it exits as a zombie
                     break
         except OSError:
             pass
@@ -305,18 +310,14 @@ def stop_mirror(restore_state: bool = True) -> bool:
     remove(MIRROR_STATE_PATH)
     if restore_state:
         try:
-            from .controls import restore_previous  # controls imports this module
-            restore_previous()
+            if st.get("auto"):
+                from .theme import restore_intent  # theme imports this module
+                restore_intent()
+            else:
+                from .controls import restore_previous  # controls imports this module
+                restore_previous()
         except Exception:
             pass
 
     print("Screen mirror stopped.")
-    return True
-
-
-def toggle_mirror(display=None) -> bool:
-    if get_mirror_status().get("active"):
-        stop_mirror()
-        return False
-    start_mirror(display)
     return True

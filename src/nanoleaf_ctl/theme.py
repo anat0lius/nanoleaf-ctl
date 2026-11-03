@@ -7,7 +7,7 @@ import sys
 import time
 
 from .api import api_request, set_power_state
-from .controls import restore_previous, set_ct, set_scene
+from .controls import restore_previous, set_color, set_ct, set_scene
 from .mirror import get_mirror_status, start_mirror, stop_mirror
 from .state import (
     PREVIEW_PID_PATH,
@@ -130,6 +130,7 @@ def _snapshot_state() -> None:
             "scene": info.get("effects", {}).get("select", ""),
             "mirror_active": mirror_st.get("active", False),
             "mirror_display": mirror_st.get("display"),
+            "mirror_auto": mirror_st.get("auto", False),
         })
     except Exception as e:
         sys.stderr.write(f"Snapshot error: {e}\n")
@@ -175,7 +176,7 @@ def run_preview_restore(delay: int = PREVIEW_SECONDS) -> None:
         try:
             scene = snapshot.get("scene", "")
             if snapshot.get("mirror_active"):
-                start_mirror(display=snapshot.get("mirror_display"))
+                start_mirror(display=snapshot.get("mirror_display"), auto=snapshot.get("mirror_auto", False))
             elif snapshot.get("colorMode") == "ct" and snapshot.get("ct"):
                 set_ct(snapshot["ct"])
             elif scene and not scene.startswith("*"):
@@ -197,22 +198,30 @@ def _restore(st: dict, cfg: dict) -> None:
     mode = st.get("mode", "scene")
     if mode == "mirror":
         start_mirror(display=st.get("mirror_display"))
-        print("Nanoleaf restored screen mirror on session start.")
+        print("Nanoleaf restored screen mirror.")
     elif mode == "theme" and get_theme_sync_status().get("palette"):
         theme = get_theme_sync_status()
         sync_theme(theme.get("theme", ""), theme["palette"])
-        print("Nanoleaf restored theme sync on session start.")
+        print("Nanoleaf restored theme sync.")
     elif mode == "ct" and st.get("ct"):
         kelvin = st["ct"]
         set_ct(kelvin)
-        print(f"Nanoleaf restored white temperature {kelvin}K on session start.")
+        print(f"Nanoleaf restored white temperature {kelvin}K.")
+    elif mode == "color" and "hue" in st and "sat" in st:
+        set_color(st["hue"], st["sat"])
+        print("Nanoleaf restored color.")
     elif mode == "scene" and st.get("scene"):
         scene = st["scene"]
         set_scene(scene)
-        print(f"Nanoleaf restored scene '{scene}' on session start.")
+        print(f"Nanoleaf restored scene '{scene}'.")
     else:
         set_power_state(True, config=cfg)
-        print("Nanoleaf powered ON on session start.")
+        print("Nanoleaf powered ON.")
+
+
+def restore_intent() -> None:
+    """Puts back the saved mode, which is still what the lights were doing before an auto mirror."""
+    _restore(load_power_intent(), load_config())
 
 
 def on_session_start(retries: int = 8, retry_interval: int = 2, once: bool = False) -> None:

@@ -99,6 +99,7 @@ def get_status() -> dict:
         "displays": displays,
         "capabilities": {"mirror": grim_available() and bool(displays)},
         "themeSync": theme_st,
+        "autoMirror": bool(cfg.get("auto_mirror")),
     }
 
 
