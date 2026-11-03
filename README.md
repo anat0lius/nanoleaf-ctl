@@ -44,7 +44,6 @@ enable specific features:
 | --- | --- |
 | `avahi-daemon` | Finding the device when pairing (not needed if you give its IP) |
 | `grim` and Hyprland | Screen mirroring only; everything else works without them |
-| `pw-dump` (PipeWire) | Auto mirror only, to tell a game or video from any other fullscreen window |
 
 It uses Nanoleaf's local OpenAPI, so it should work with the panel products that expose it (Light Panels,
 Canvas, Shapes, Elements, Lines, Blocks). So far it has been tested only with Nanoleaf Blocks, on Omarchy.
