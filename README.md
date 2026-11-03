@@ -66,7 +66,7 @@ Without installing: `PYTHONPATH=src python3 -m nanoleaf_ctl <command>`.
 ## Usage
 
 ```sh
-nanoleaf-ctl status                 # power, brightness, current scene
+nanoleaf-ctl status                 # power, brightness, current scene, mirror mode
 nanoleaf-ctl on | off | toggle
 nanoleaf-ctl rename "Desk lights"   # display name (empty string = the device's own name)
 nanoleaf-ctl brightness 60
@@ -78,7 +78,6 @@ nanoleaf-ctl mirror start --display DP-2
 nanoleaf-ctl mirror displays        # detected displays
 nanoleaf-ctl mirror auto            # mirror while a fullscreen game or video plays, then resume
 nanoleaf-ctl mirror stop            # off: stops the mirror and auto
-nanoleaf-ctl mirror status          # current mode: on, auto or off
 nanoleaf-ctl theme-sync --name sunset --colors "#f38d70" "#85dacc" "#fd6883"
 nanoleaf-ctl theme-sync --off       # unlock and restore the previous scene
 nanoleaf-ctl theme-change --name dawn --colors "#f9cc6c" "#a8a9eb"

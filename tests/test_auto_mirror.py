@@ -305,20 +305,22 @@ def test_cli_mirror_modes(monkeypatch, args, expected):
     assert calls == expected
 
 
-@pytest.mark.parametrize("mirror_st, enabled, expected", [
-    ({"active": False}, False, "off"),
-    ({"active": False}, True, "auto"),
-    ({"active": True, "auto": True, "pid": 1}, True, "auto"),
-    ({"active": True, "auto": False, "pid": 1}, False, "on"),
-    ({"active": True, "auto": False, "pid": 1}, True, "on"),
+@pytest.mark.parametrize("mirror_st, enabled, running, expected", [
+    ({"active": False}, False, False, ""),
+    ({"active": False}, True, True, " | Mirror: AUTO"),
+    ({"active": False}, True, False, " | Mirror: AUTO, watcher not running"),
+    ({"active": True, "auto": True, "display": "DP-2"}, True, True, " | Mirror: AUTO, active (DP-2)"),
+    ({"active": True, "auto": False, "display": "DP-2"}, False, False, " | Mirror: ON (DP-2)"),
+    ({"active": True, "auto": False, "display": "DP-2"}, True, True, " | Mirror: ON (DP-2)"),
 ])  # fmt: skip
-def test_cli_status_reports_mode(monkeypatch, capsys, mirror_st, enabled, expected):
+def test_cli_status_reports_mirror_mode(monkeypatch, capsys, mirror_st, enabled, running, expected):
     from nanoleaf_ctl import cli
 
-    monkeypatch.setattr(cli.mirror, "get_mirror_status", lambda: mirror_st)
-    monkeypatch.setattr(cli.auto_mirror, "get_status", lambda: {"enabled": enabled, "running": enabled})
-    cli.main(["mirror", "status", "--json"])
-    assert json.loads(capsys.readouterr().out)["mode"] == expected
+    status = {"name": "N", "model": "M", "on": True, "brightness": 50, "currentEffect": "S", "mirror": mirror_st}
+    monkeypatch.setattr(cli.controls, "get_status", lambda: status)
+    monkeypatch.setattr(cli.auto_mirror, "get_status", lambda: {"enabled": enabled, "running": running})
+    cli.main(["status"])
+    assert capsys.readouterr().out == f"N (M) - Power: ON | Brightness: 50% | Scene: S{expected}\n"
 
 
 def test_disable_leaves_a_config_without_auto_untouched(monkeypatch):

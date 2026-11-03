@@ -55,7 +55,6 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Smooth transition time in deciseconds (default: 4 = 400ms)")
     m_sub.add_parser("auto", help="Mirror while a fullscreen game or video plays audio, then resume")
     m_sub.add_parser("stop", help="Stop screen mirror, including auto")
-    _json_flag(m_sub.add_parser("status", help="Check screen mirror status"))
     _json_flag(m_sub.add_parser("displays", help="List available displays"))
 
     p = sub.add_parser("mirror-run", help=argparse.SUPPRESS)
@@ -115,6 +114,15 @@ def _cmd_pair(a):
     sys.exit(0 if api.pair(a.ip, a.port, a.timeout) else 1)
 
 
+def _mirror_info(st: dict) -> str:
+    if st.get("active"):
+        return f"AUTO, active ({st['display']})" if st.get("auto") else f"ON ({st['display']})"
+    auto = auto_mirror.get_status()
+    if not auto["enabled"]:
+        return ""
+    return "AUTO" if auto["running"] else "AUTO, watcher not running"
+
+
 def _cmd_status(a):
     if a.json and not controls.is_configured():
         print(json.dumps({"configured": False}))
@@ -124,7 +132,8 @@ def _cmd_status(a):
         print(json.dumps(st, indent=2))
         return
     pwr = "ON" if st["on"] else "OFF"
-    mirror_info = f" | Mirror: ACTIVE ({st['mirror']['display']})" if st["mirror"].get("active") else ""
+    info = _mirror_info(st["mirror"])
+    mirror_info = f" | Mirror: {info}" if info else ""
     print(f"{st['name']} ({st['model']}) - Power: {pwr} | Brightness: {st['brightness']}% "
           f"| Scene: {st['currentEffect']}{mirror_info}")
 
@@ -176,22 +185,6 @@ def _cmd_ct(a):
     print(f"Color temperature set to {a.kelvin}K")
 
 
-def _mirror_status(a):
-    st = mirror.get_mirror_status()
-    auto = auto_mirror.get_status()
-    mode = "on" if st.get("active") and not st.get("auto") else "auto" if auto["enabled"] else "off"
-    if a.json:
-        print(json.dumps({**st, "mode": mode, "watcher_running": auto["running"]}, indent=2))
-        return
-    label = "AUTO" if mode == "auto" else "ON" if mode == "on" else "OFF"
-    if st.get("active"):
-        print(f"Screen mirror {label}, ACTIVE (PID: {st['pid']}, Display: {st['display']}, FPS: {st['fps']})")
-    elif mode == "auto" and not auto["running"]:
-        print("Screen mirror AUTO, watcher not running")
-    else:
-        print(f"Screen mirror {label}, INACTIVE")
-
-
 def _mirror_displays(a):
     mons = mirror.get_hyprland_monitors()
     if a.json:
@@ -222,7 +215,6 @@ def _cmd_mirror(a):
         "start": lambda: _mirror_start(a),
         "auto": lambda: _mirror_auto(a),
         "stop": lambda: _mirror_stop(a),
-        "status": lambda: _mirror_status(a),
         "displays": lambda: _mirror_displays(a),
     }
     handler = handlers.get(a.mirror_command)
