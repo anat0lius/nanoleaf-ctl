@@ -174,3 +174,5 @@ uv run ruff check
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+This is an unofficial project, not affiliated with or endorsed by Nanoleaf.
