@@ -60,6 +60,11 @@ Panel {
   property int currentCt: 0
   property string colorMode: ""
   property bool isThemeSynced: false
+  // What's driving the lights right now: its section title is highlighted.
+  readonly property bool themeActive: root.isThemeSynced && !root.isMirroring
+  readonly property bool whiteActive: root.isOn && !root.isMirroring && !root.isThemeSynced && root.colorMode === "ct"
+  readonly property bool sceneActive: root.isOn && !root.isMirroring && !root.isThemeSynced && root.colorMode !== "ct"
+    && root.scenes.indexOf(root.currentScene) !== -1
   // Optional systemd user service: lights on at login, off at logout.
   property bool sessionAvailable: false
   property bool sessionEnabled: false
@@ -737,7 +742,7 @@ Panel {
 
             Text {
               text: "󰔏"
-              color: root.themeForeground
+              color: root.whiteActive ? Color.accent : root.themeForeground
               font.pixelSize: Style.font.icon
               font.family: root.bar ? root.bar.fontFamily : Style.font.family
               anchors.verticalCenter: parent.verticalCenter
@@ -745,9 +750,10 @@ Panel {
 
             Text {
               text: "White Temperature"
-              color: root.themeForeground
+              color: root.whiteActive ? Color.accent : root.themeForeground
               font.pixelSize: Style.font.body
               font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.bold: root.whiteActive
               anchors.verticalCenter: parent.verticalCenter
             }
           }
@@ -920,7 +926,7 @@ Panel {
 
               Text {
                 text: "󰏘"
-                color: root.isThemeSynced ? Color.accent : root.themeForeground
+                color: root.themeActive ? Color.accent : root.themeForeground
                 font.pixelSize: Style.font.icon
                 font.family: root.bar ? root.bar.fontFamily : Style.font.family
                 anchors.verticalCenter: parent.verticalCenter
@@ -928,10 +934,10 @@ Panel {
 
               Text {
                 text: "Theme Sync"
-                color: root.isThemeSynced ? Color.accent : root.themeForeground
+                color: root.themeActive ? Color.accent : root.themeForeground
                 font.pixelSize: Style.font.body
                 font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                font.bold: root.isThemeSynced
+                font.bold: root.themeActive
                 anchors.verticalCenter: parent.verticalCenter
               }
             }
@@ -980,7 +986,7 @@ Panel {
 
             Text {
               text: "󰸉"
-              color: root.themeForeground
+              color: root.sceneActive ? Color.accent : root.themeForeground
               font.pixelSize: Style.font.icon
               font.family: root.bar ? root.bar.fontFamily : Style.font.family
               anchors.verticalCenter: parent.verticalCenter
@@ -988,9 +994,10 @@ Panel {
 
             Text {
               text: "Scenes"
-              color: root.themeForeground
+              color: root.sceneActive ? Color.accent : root.themeForeground
               font.pixelSize: Style.font.body
               font.family: root.bar ? root.bar.fontFamily : Style.font.family
+              font.bold: root.sceneActive
               anchors.verticalCenter: parent.verticalCenter
             }
           }
@@ -1026,10 +1033,9 @@ Panel {
                 anchors.rightMargin: Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
                 text: modelData
-                color: modelData === root.currentScene ? sceneRow.accent : sceneRow.foreground
+                color: sceneRow.foreground
                 font.family: root.bar ? root.bar.fontFamily : Style.font.family
                 font.pixelSize: Style.font.body
-                font.bold: modelData === root.currentScene
                 elide: Text.ElideRight
               }
 
@@ -1040,7 +1046,7 @@ Panel {
                 anchors.rightMargin: Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
                 text: "󰝚"
-                color: modelData === root.currentScene ? sceneRow.accent : sceneRow.foreground
+                color: sceneRow.foreground
                 opacity: 0.7
                 font.family: root.bar ? root.bar.fontFamily : Style.font.family
                 font.pixelSize: Style.font.body
