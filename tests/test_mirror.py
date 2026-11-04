@@ -42,3 +42,14 @@ def test_second_mirror_worker_refuses_to_run(monkeypatch, tmp_path, capsys):
     os.close(held)  # releasing the lock lets the next worker start
     mirror.run_mirror_loop("DP-1", 8, 4)
     assert len(ran) == 1
+
+
+def test_build_packet_clamps_trans_time_and_skips_unaddressable_panels():
+    pixels = bytes([1, 2, 3]) * (4 * 4)
+    targets = [
+        {"panelId": 70000, "cx": 2, "cy": 2, "radius": 1},  # doesn't fit the protocol's 16-bit id
+        {"panelId": "7", "cx": 2, "cy": 2, "radius": 1},
+        {"panelId": 7, "cx": 2, "cy": 2, "radius": 1},
+    ]
+    assert build_packet(targets, pixels, 4, 4, 999999) == struct.pack(">HHBBBBH", 1, 7, 1, 2, 3, 0, 0xFFFF)
+    assert build_packet(targets, pixels, 4, 4, -5)[-2:] == struct.pack(">H", 0)

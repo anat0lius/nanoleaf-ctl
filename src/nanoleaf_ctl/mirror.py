@@ -130,6 +130,9 @@ def sample_region(pixels: bytes, width: int, height: int, cx: int, cy: int, radi
 
 
 def build_packet(targets: list[dict], pixels: bytes, width: int, height: int, trans_time: int) -> bytes:
+    """One extControl frame. Panels the protocol can't address (id outside 16 bits) are left out."""
+    trans_time = max(0, min(0xFFFF, int(trans_time)))
+    targets = [t for t in targets if isinstance(t["panelId"], int) and 0 <= t["panelId"] <= 0xFFFF]
     packet = bytearray(struct.pack(">H", len(targets)))
     for t in targets:
         r, g, b = sample_region(pixels, width, height, t["cx"], t["cy"], t["radius"])
@@ -239,7 +242,14 @@ def _run_mirror_loop(display_name, fps, trans_time, auto=False) -> None:
                 except Exception:
                     pass
 
-            sock.sendto(build_packet(targets, raw[idx + 5:], w, h, trans_time), (ip, EXT_CONTROL_PORT))
+            pixels = raw[idx + 5:]
+            if len(pixels) < w * h * 3:  # grim was cut short, e.g. the display changed mid-capture
+                time.sleep(frame_interval)
+                continue
+            try:
+                sock.sendto(build_packet(targets, pixels, w, h, trans_time), (ip, EXT_CONTROL_PORT))
+            except OSError:
+                pass  # network briefly unreachable, e.g. around suspend: the next frame retries
 
             sleep_time = frame_interval - (time.time() - t_start)
             if sleep_time > 0:
