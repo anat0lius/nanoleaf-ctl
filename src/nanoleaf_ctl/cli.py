@@ -6,7 +6,7 @@ import sys
 
 from . import api, auto_mirror, controls, mirror, service, theme
 from .api import DEFAULT_PORT
-from .state import get_theme_sync_status, get_user_power_intent, set_user_power_intent
+from .state import get_theme_sync_status, get_user_power_intent, harden_state, set_user_power_intent
 
 
 def _json_flag(p: argparse.ArgumentParser, help: str = "Output as JSON") -> None:
@@ -325,6 +325,7 @@ def main(argv: list[str] | None = None) -> None:
         parser.print_help()
         return
 
+    harden_state()
     try:
         COMMANDS[args.command](args)
     except Exception as e:

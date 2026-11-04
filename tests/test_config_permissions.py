@@ -72,3 +72,31 @@ def test_new_worker_log_is_private(monkeypatch, tmp_path):
 
     assert _mode(state_dir) == 0o700
     assert _mode(state_dir / "worker.log") == 0o600
+
+
+def test_any_command_tightens_legacy_state_dir_and_log(monkeypatch, tmp_path):
+    from nanoleaf_ctl import cli
+
+    state_dir = tmp_path / "nanoleaf"
+    state_dir.mkdir()
+    state_dir.chmod(0o755)
+    log = state_dir / "worker.log"
+    log.write_text("old\n")
+    log.chmod(0o644)
+    monkeypatch.setattr(state, "STATE_DIR", state_dir)
+    monkeypatch.setattr(state, "WORKER_LOG_PATH", log)
+    monkeypatch.setitem(cli.COMMANDS, "theme-status", lambda a: None)
+
+    cli.main(["theme-status"])
+
+    assert _mode(state_dir) == 0o700
+    assert _mode(log) == 0o600
+
+
+def test_harden_state_does_not_create_missing_files(monkeypatch, tmp_path):
+    monkeypatch.setattr(state, "STATE_DIR", tmp_path / "nope")
+    monkeypatch.setattr(state, "WORKER_LOG_PATH", tmp_path / "nope/worker.log")
+
+    state.harden_state()
+
+    assert not (tmp_path / "nope").exists()

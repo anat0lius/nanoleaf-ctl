@@ -51,6 +51,16 @@ def ensure_state_dir() -> None:
     _restrict(STATE_DIR, 0o700)
 
 
+def harden_state() -> None:
+    """Tightens a state dir and worker log left by an older version, if they exist.
+
+    Run on every command, since a log from a release that logged the device token would
+    otherwise stay readable until something happened to write state.
+    """
+    _restrict(STATE_DIR, 0o700)
+    _restrict(WORKER_LOG_PATH, 0o600)
+
+
 def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.parent == STATE_DIR:
