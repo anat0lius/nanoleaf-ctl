@@ -15,6 +15,7 @@ from nanoleaf_ctl.auto_mirror import (
     playing_pids,
     process_chain,
     relevant_events,
+    split_events,
 )
 
 MONITORS = [
@@ -93,8 +94,7 @@ def test_playing_pids_includes_ancestors_for_audio_from_a_child_process():
 def test_detector_waits_on_a_silent_window_then_sticks_once_it_plays(monkeypatch):
     monkeypatch.setattr(auto_mirror, "get_hyprland_monitors", lambda: MONITORS)
     monkeypatch.setattr(auto_mirror, "load_config", lambda: {})
-    monkeypatch.setattr(auto_mirror.subprocess, "run",
-                        lambda *a, **k: subprocess.CompletedProcess(a, 0, json.dumps([client()]), ""))
+    monkeypatch.setattr(auto_mirror, "run_limited", lambda *a, **k: json.dumps([client()]))
     playing = set()
     monkeypatch.setattr(auto_mirror, "_read_playing_pids", lambda: playing)
     d = FullscreenDetector()
@@ -109,10 +109,19 @@ def test_detector_waits_on_a_silent_window_then_sticks_once_it_plays(monkeypatch
     playing.clear()  # paused
     assert d.read("DP-1") == "DP-1"
 
-    monkeypatch.setattr(auto_mirror.subprocess, "run",
-                        lambda *a, **k: subprocess.CompletedProcess(a, 0, "[]", ""))
+    monkeypatch.setattr(auto_mirror, "run_limited", lambda *a, **k: "[]")
     assert d.read("DP-1") is None
     assert d.waiting is False  # nothing is fullscreen: no need to keep checking
+
+
+def test_split_events_keeps_a_partial_line_for_next_time():
+    assert split_events(b"", b"fullscreen>>1\nworkspace>>") == ([b"fullscreen>>1"], b"workspace>>")
+    assert split_events(b"workspace>>", b"2\n") == ([b"workspace>>2"], b"")
+
+
+def test_split_events_drops_a_partial_line_that_never_ends():
+    lines, rest = split_events(b"", b"x" * (auto_mirror.MAX_PENDING_BYTES + 1))
+    assert (lines, rest) == ([], b"")
 
 
 def test_relevant_events():

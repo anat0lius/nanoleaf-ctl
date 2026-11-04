@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -115,6 +116,26 @@ def spawn_worker(*args: str) -> None:
             [sys.executable, "-m", "nanoleaf_ctl", *args],
             env=env, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True,
         )
+
+
+MAX_OUTPUT_BYTES = 8 << 20  # `pw-dump` on a busy desktop is the largest, at a few hundred KB
+
+
+def run_limited(cmd: list[str], timeout: float = 3, limit: int = MAX_OUTPUT_BYTES) -> str:
+    """Runs ``cmd`` and returns its stdout, killing it after ``timeout`` and refusing more than ``limit`` bytes."""
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    timer = threading.Timer(timeout, proc.kill)
+    timer.start()
+    try:
+        raw = proc.stdout.read(limit + 1)
+    finally:
+        timer.cancel()
+        proc.kill()
+        proc.stdout.close()
+        proc.wait()
+    if len(raw) > limit:
+        raise RuntimeError(f"{cmd[0]} output is larger than {limit} bytes")
+    return raw.decode("utf-8", errors="replace")
 
 
 def is_pid_alive(pid: int) -> bool:

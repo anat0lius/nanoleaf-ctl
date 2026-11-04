@@ -22,6 +22,7 @@ from .state import (
     read_json,
     remember_previous_mode,
     remove,
+    run_limited,
     save_power_intent,
     spawn_worker,
     unlock_theme_sync,
@@ -44,8 +45,7 @@ def grim_available() -> bool:
 
 def get_hyprland_monitors() -> list[dict]:
     try:
-        proc = subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True, timeout=3)
-        return json.loads(proc.stdout)
+        return json.loads(run_limited(["hyprctl", "monitors", "-j"]))
     except Exception:
         return []
 

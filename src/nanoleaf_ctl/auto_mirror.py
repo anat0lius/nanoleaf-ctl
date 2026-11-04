@@ -6,7 +6,6 @@ import select
 import shutil
 import signal
 import socket
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -33,6 +32,7 @@ from .state import (
     load_power_intent,
     read_json,
     remove,
+    run_limited,
     save_config,
     save_power_intent,
     spawn_worker,
@@ -43,6 +43,7 @@ FULLSCREEN = 2  # bit of Hyprland's `fullscreen` value: 1 is only maximized
 START_DELAY = 1  # games often flip modes while launching
 STOP_DELAY = 3  # a quick alt-tab away and back shouldn't reset the lights
 TICK_SECONDS = 0.5
+MAX_PENDING_BYTES = 64 << 10  # events are short lines; a partial one never gets this long
 AUDIO_CHECK_SECONDS = 2  # only while a fullscreen window is silent: it may start playing later
 # What can change which window fills a display. Focus alone can't: the game stays visible.
 HYPRLAND_EVENTS = {
@@ -116,8 +117,7 @@ class FullscreenDetector:
     def read(self, previous: str | None) -> str | None:
         monitors = get_hyprland_monitors()
         try:
-            proc = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=3)
-            clients = json.loads(proc.stdout)
+            clients = json.loads(run_limited(["hyprctl", "clients", "-j"]))
         except Exception:
             return previous
         if not monitors:
@@ -134,8 +134,7 @@ class FullscreenDetector:
 
 def _read_playing_pids() -> set[int]:
     try:
-        proc = subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3)
-        return playing_pids(json.loads(proc.stdout))
+        return playing_pids(json.loads(run_limited(["pw-dump"])))
     except Exception:
         return set()
 
@@ -195,8 +194,7 @@ class AutoMirror:
 def _event_socket_paths() -> list[Path]:
     signatures = [os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")]  # missing or stale in some services
     try:
-        proc = subprocess.run(["hyprctl", "instances", "-j"], capture_output=True, text=True, timeout=3)
-        signatures += [i.get("instance") for i in json.loads(proc.stdout)]
+        signatures += [i.get("instance") for i in json.loads(run_limited(["hyprctl", "instances", "-j"]))]
     except Exception:
         pass
     runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
@@ -215,6 +213,12 @@ def _connect_events() -> socket.socket | None:
             except OSError:
                 sock.close()
     return None
+
+
+def split_events(pending: bytes, data: bytes) -> tuple[list[bytes], bytes]:
+    """Complete lines in what has arrived so far, and the unfinished rest, which is bounded."""
+    *lines, rest = (pending + data).split(b"\n")
+    return lines, rest if len(rest) <= MAX_PENDING_BYTES else b""  # no newline in sight: not Hyprland
 
 
 def relevant_events(lines: list[bytes]) -> bool:
@@ -263,7 +267,7 @@ def _watch(sock: socket.socket) -> None:
                     if get_mirror_status().get("auto"):
                         stop_mirror(restore_state=False)
                     return
-                *lines, pending = (pending + data).split(b"\n")
+                lines, pending = split_events(pending, data)
                 stale = relevant_events(lines)
             if stale or (detector.waiting and time.monotonic() - checked_at >= AUDIO_CHECK_SECONDS):
                 checked_at = time.monotonic()
